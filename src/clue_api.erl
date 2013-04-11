@@ -54,7 +54,7 @@ content_accepted(_Uid) ->
 %%
 %%
 to_json(Uri, List) ->
-   [{uri(Uri, K), V} || {K, V} <- List].
+   [{uri(Uri, K), [clue:get(V), clue:val(V)]} || {K, V} <- List].
 
 %%
 %% convert counter value to urn
