@@ -1,0 +1,18 @@
+{application, clue,
+   [
+      {description, "clue: system status repository"},
+      {vsn,         "0.1.0"},
+      {modules,     [
+         clue,
+         clue_sup,
+         clue_app
+      ]},
+      {registered,  []},
+      {applications,[
+         kernel,
+         stdlib
+      ]},
+      {mod, {clue_app, []}},
+      {env, []}
+   ]
+}.  
