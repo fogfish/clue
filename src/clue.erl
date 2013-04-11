@@ -109,6 +109,9 @@ get(Key) ->
 %% get raw counter value
 -spec(val/1 :: (any()) -> any()).
 
+val(#clue{val=Val}) ->
+   Val;
+
 val(Key) ->
    try
       ets:lookup_element(clue, Key, #clue.val)
