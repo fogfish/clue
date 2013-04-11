@@ -28,7 +28,7 @@
    inc/1, inc/2, dec/1, dec/2, usec/2,
 
    %% 
-   lookup/1
+   lookup/1, lookup/2
 ]).
 
 %%
@@ -167,3 +167,10 @@ usec(Key, T) ->
 lookup(Key) ->
    [{element(#clue.key, X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
 
+%%
+%%
+lookup(val, Key) ->
+   [{element(#clue.key, X), clue:val(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})];
+
+lookup(all, Key) ->
+   [{element(#clue.key, X), [clue:val(X), clue:get(X)]} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})];
