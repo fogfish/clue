@@ -32,7 +32,22 @@ start(_Type, _Args) ->
       {read_concurrency,  true},
       {keypos,       #clue.key}
    ]),
-   clue_sup:start_link().
+   {ok, Sup} = clue_sup:start_link(),
+   lists:foreach(fun default_entity/1, opts:val(default, [], clue)),
+   {ok, Sup}.
 
 stop(_State) ->
    ok.
+
+
+default_entity({counter, X}) ->
+   clue:counter(X);
+default_entity({meter,   X}) ->
+   clue:meter(X);
+default_entity({blob,    X}) ->
+   clue:blob(X).
+
+
+
+
+
