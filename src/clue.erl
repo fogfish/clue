@@ -166,7 +166,7 @@ dec(Key, Val) ->
 -spec(usec/2 :: (any(), any()) -> ok).
 
 usec(Key, T) ->
-   adb:inc(Key, timer:now_diff(erlang:now(), T)).
+   clue:inc(Key, timer:now_diff(erlang:now(), T)).
 
 %%
 %%
