@@ -28,7 +28,10 @@
    inc/1, inc/2, dec/1, dec/2, usec/2,
 
    %% 
-   lookup/1, lookup/2
+   lookup/1, lookup/2,
+
+   %%
+   debug/0
 ]).
 
 %%
@@ -177,3 +180,8 @@ lookup(val, Key) ->
 
 lookup(all, Key) ->
    [{element(#clue.key, X), [clue:val(X), clue:get(X)]} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
+
+
+debug() ->
+   clue_dump:start_link().
+

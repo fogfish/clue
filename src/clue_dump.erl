@@ -14,42 +14,30 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_app).
--behaviour(application).
--author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
-
--include("clue.hrl").
+%%   @description
+%%      clue dumps clue to std io
+-module(clue_dump).
 
 -export([
-   start/2, stop/1
+   start_link/0, init/1
 ]).
 
-start(_Type, _Args) ->
-   {ok, Sup} = clue_sup:start_link(),
-   % create clue repository
-   _  = ets:new(clue, [
-      public, 
-      named_table, 
-      {write_concurrency, true}, 
-      {read_concurrency,  true},
-      {keypos,       #clue.key}
-   ]),
-   
-   lists:foreach(fun default_entity/1, opts:val(default, [], clue)),
-   {ok, Sup}.
+%%
+%%
+start_link() ->
+    proc_lib:start_link(?MODULE, init, [self()]).
 
-stop(_State) ->
-   ok.
+init(Parent) ->
+   proc_lib:init_ack(Parent, {ok, self()}),
+   loop().
 
-
-default_entity({counter, X}) ->
-   clue:counter(X);
-default_entity({meter,   X}) ->
-   clue:meter(X);
-default_entity({blob,    X}) ->
-   clue:blob(X).
-
-
+%%
+%%
+loop() ->
+   timer:sleep(10000),
+   io:format("------------~n"),
+   [io:format("~p\t~p~n", [Key, Val]) || {Key, Val} <- clue:lookup('_')],
+   loop().
 
 
 
