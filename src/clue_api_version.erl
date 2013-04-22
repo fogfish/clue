@@ -25,7 +25,7 @@ content_accepted(_Uid) ->
 'GET'({vsn, _}, _Uri, _Heads) ->
    Text = lists:map(
       fun({Title, Desc, Vsn}) ->
-         io_lib:format("~s\t~s-~s~n", [Desc, Title, Vsn])
+         io_lib:format("~s-~s\t\t~s~n", [Desc, Title, Vsn])
       end,
       application:which_applications()
    ),
