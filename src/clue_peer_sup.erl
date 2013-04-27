@@ -14,10 +14,11 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_sup).
+-module(clue_peer_sup).
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
+-include("clue.hrl").
 -export([
    start_link/0, init/1
 ]).
@@ -25,37 +26,34 @@
 %%
 %%
 start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+   {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+   lists:foreach(fun native/1, opts:val(peer, [], clue)),
+   {ok, Sup}.
 
-   
 init([]) ->   
    {ok,
       {
          {one_for_one, 4, 1800},
-         clue_node() ++ clue_peer()
+         []
       }
    }.
 
 %%
 %%
-clue_node() ->
-   clue_node(opts:val(port, undefined, clue)).
-clue_node(undefined) ->
-   [];
-clue_node(native) ->
-   [{
-      clue_node,
-      {clue_node_native, start_link, []},
+native({Peer, Mask})
+ when is_atom(Peer) ->
+   {ok, _} = supervisor:start_child(?MODULE, {
+      Peer,
+      {clue_peer_native, start_link, [Peer, Mask, opts:val(sync, ?CLUE_SYNC, clue)]},
       permanent, 60000, worker, dynamic
-   }].
+   });
 
-%%
-%%
-clue_peer() ->
-   [{
-      clue_peer,
-      {clue_peer_sup, start_link, []},
-      permanent, 60000, supervisor, dynamic
-   }].
+native(Peer)
+ when is_atom(Peer) ->
+   {ok, _} = supervisor:start_child(?MODULE, {
+      Peer,
+      {clue_peer_native, start_link, [Peer, '_',  opts:val(sync, ?CLUE_SYNC, clue)]},
+      permanent, 60000, worker, dynamic
+   }).
 
 

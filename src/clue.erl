@@ -18,7 +18,7 @@
 -include("clue.hrl").
 
 -export([
-   start/0,
+   start/0, start/1,
 
    %% define entities
    counter/1, meter/1, blob/1, 
@@ -28,23 +28,20 @@
    inc/1, inc/2, dec/1, dec/2, usec/2,
 
    %% 
-   lookup/1, lookup/2,
-
-   %%
-   debug/0
+   lookup/1
 ]).
 
 %%
 %% start application
-start() ->
-   applib:boot(?MODULE, []).
+start()    -> applib:boot(?MODULE, []).
+start(Cfg) -> applib:boot(?MODULE, Cfg).
+
 
 %%
 %% create counter
 -spec(counter/1 :: (any()) -> ok).
 -spec(meter/1   :: (any()) -> ok).
 -spec(blob/1    :: (any()) -> ok).
-
 
 counter(Key) ->
    _ = ets:insert(clue, 
@@ -83,8 +80,13 @@ blob(Key) ->
 
 put(Key, Val) ->
    case ets:update_element(clue, Key, {#clue.val, Val}) of
-      true  -> ok;
-      false -> undefined
+      true  -> 
+         ok;
+      false -> 
+         % unable to update, key not found, fall-back to counter
+         counter(Key),
+         ets:update_element(clue, Key, {#clue.val, Val}),
+         ok
    end.
 
 %%
@@ -96,6 +98,7 @@ get(#clue{type=counter, val=Val}) ->
 
 get(#clue{type=meter, key=Key, val=Val, ext={T, Last}}) ->
    R = (Val - Last) / (timer:now_diff(erlang:now(), T) / 1000000),
+   %% ??? do update once 60 sec
    _ = ets:update_element(clue, Key, {#clue.ext, {erlang:now(), Val}}),
    R;
 
@@ -171,17 +174,4 @@ usec(Key, T) ->
 %%
 %%
 lookup(Key) ->
-   [{element(#clue.key, X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
-
-%%
-%%
-lookup(val, Key) ->
-   [{element(#clue.key, X), clue:val(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})];
-
-lookup(all, Key) ->
-   [{element(#clue.key, X), [clue:val(X), clue:get(X)]} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
-
-
-debug() ->
-   clue_dump:start_link().
-
+   [{element(#clue.key, X), clue:val(X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].

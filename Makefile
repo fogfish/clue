@@ -1,5 +1,9 @@
 .PHONY: deps test
 
+ifndef node
+node=clue
+endif
+
 all: rebar deps compile
 
 rel: rebar deps release
@@ -34,4 +38,4 @@ rebar:
 	chmod ugo+x rebar
 
 run:
-	erl -name clue@127.0.0.1 -setcookie clue -pa ./deps/*/ebin -pa ./ebin 
+	erl -name ${node}@127.0.0.1 -setcookie nocookie -pa ./deps/*/ebin -pa ./ebin 

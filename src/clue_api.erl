@@ -15,6 +15,7 @@
 %%   limitations under the License.
 %%
 -module(clue_api).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
    uri/0, 
@@ -24,8 +25,8 @@
 
 uri() ->
    [
-      {clue,  "/_sys/clue/_"},
       {all,   "/_sys/clue"}
+     ,{clue,  "/_sys/clue/*"}
    ].
 
 allowed_methods(_Uid)  -> 
@@ -44,17 +45,17 @@ content_accepted(_Uid) ->
 'GET'({clue, _}, Uri, _Heads) ->
    [<<"_sys">>, <<"clue">> | Id] = uri:get(segments, Uri),
    Key  = [binary_to_existing_atom(X, utf8) || X <- Id],
-   Json = to_json(Uri, clue:lookup(all, list_to_tuple(Key))),
+   Json = to_json(Uri, clue:lookup(list_to_tuple(Key))),
    {ok, jsx:to_json(Json)};
  
 'GET'({all,  _}, Uri, _Heads) ->
-   Json = to_json(Uri, clue:lookup(all, '_')),
+   Json = to_json(Uri, clue:lookup('_')),
    {ok, jsx:to_json(Json)}.
 
 %%
 %%
 to_json(Uri, List) ->
-   [{uri(Uri, K), V} || {K, V} <- List].
+   [[{id, uri(Uri, Key)}, {raw, Raw}, {val, Val}] || {Key, Raw, Val} <- List].
 
 %%
 %% convert counter value to urn
