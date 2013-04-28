@@ -54,6 +54,25 @@ native(Peer)
       Peer,
       {clue_peer_native, start_link, [Peer, '_',  opts:val(sync, ?CLUE_SYNC, clue)]},
       permanent, 60000, worker, dynamic
+   });
+
+native({Peer, Mask})
+ when is_list(Peer) ->
+   {ok, _} = supervisor:start_child(?MODULE, {
+      Peer,
+      {clue_peer_tcp, start_link, [Peer, Mask, opts:val(sync, ?CLUE_SYNC, clue)]},
+      permanent, 60000, worker, dynamic
+   });
+
+native(Peer)
+ when is_list(Peer) ->
+   {ok, _} = supervisor:start_child(?MODULE, {
+      Peer,
+      {clue_peer_tcp, start_link, [Peer, '_',  opts:val(sync, ?CLUE_SYNC, clue)]},
+      permanent, 60000, worker, dynamic
    }).
+
+
+
 
 

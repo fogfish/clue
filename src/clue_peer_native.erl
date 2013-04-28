@@ -82,6 +82,7 @@ code_change(_Vsn, S, _Extra) ->
 
 
 synchronize(S) ->
+   % TODO: filter out any key originated by peer
    Node = erlang:node(),
    List = lists:map(
       fun({Key, Raw, _}) -> {clue, list_to_tuple([Node | key_to_list(Key)]), Raw} end,

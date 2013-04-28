@@ -24,8 +24,12 @@
    counter/1, meter/1, blob/1, 
    
    %% counter api
-   put/2, get/1, val/1,
-   inc/1, inc/2, dec/1, dec/2, usec/2,
+   put/2, put/3, put_/3, 
+   get/1, get/2, val/1, val/2,
+   inc/1, inc/2, inc/3,
+   dec/1, dec/2, dec/3,
+
+   usec/2,
 
    %% 
    lookup/1
@@ -76,7 +80,9 @@ blob(Key) ->
 
 %%
 %% put value
--spec(put/2 :: (any(), any()) -> ok).
+-spec(put/2  :: (any(), any()) -> ok).
+-spec(put/3  :: (node(), any(), any()) -> ok).
+-spec(put_/3 :: (node(), any(), any()) -> ok).
 
 put(Key, Val) ->
    case ets:update_element(clue, Key, {#clue.val, Val}) of
@@ -89,9 +95,16 @@ put(Key, Val) ->
          ok
    end.
 
+put(Node, Key, Val) ->
+   rpc:call(Node, clue, put, [Key, Val]).
+
+put_(Node, Key, Val) ->
+   rpc:cast(Node, clue, put, [Key, Val]).
+
 %%
 %% get value
 -spec(get/1 :: (any()) -> any()).
+-spec(get/2 :: (node(), any()) -> any()).
 
 get(#clue{type=counter, val=Val}) ->
    Val;
@@ -111,6 +124,9 @@ get(Key) ->
       [E] -> clue:get(E)
    end.
 
+get(Node, Key) ->
+   rpc:call(Node, clue, get, [Key]).
+
 %%
 %% get raw counter value
 -spec(val/1 :: (any()) -> any()).
@@ -125,10 +141,14 @@ val(Key) ->
       undefined
    end.
 
+val(Node, Key) ->
+   rpc:call(Node, clue, val, [Key]).
+
 %%
 %% increment counter
 -spec(inc/1 :: (any()) -> integer()).
 -spec(inc/2 :: (any(), integer()) -> integer()).
+-spec(inc/3 :: (node(), any(), integer()) -> integer()).
 
 inc(Key) ->
    try
@@ -143,6 +163,9 @@ inc(Key, Val) ->
    catch _:badarg ->
       undefined
    end.
+
+inc(Node, Key, Val) ->
+   rpc:call(Node, clue, inc, [Key, Val]).
 
 %%
 %% decrement counter
@@ -162,6 +185,9 @@ dec(Key, Val) ->
    catch _:badarg ->
       undefined
    end.
+
+dec(Node, Key, Val) ->
+   rpc:call(Node, clue, dec, [Key, Val]).
 
 
 %%

@@ -47,7 +47,15 @@ clue_node(native) ->
       clue_node,
       {clue_node_native, start_link, []},
       permanent, 60000, worker, dynamic
+   }];
+clue_node(Port)
+ when is_number(Port) ->
+   [{
+      clue_node,
+      {clue_node_tcp, start_link, [Port]},
+      permanent, 60000, worker, dynamic
    }].
+
 
 %%
 %%
