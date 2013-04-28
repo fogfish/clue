@@ -32,7 +32,7 @@
    usec/2,
 
    %% 
-   lookup/1
+   lookup/1, fold/2
 ]).
 
 %%
@@ -201,3 +201,16 @@ usec(Key, T) ->
 %%
 lookup(Key) ->
    [{element(#clue.key, X), clue:val(X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
+
+%%
+%%
+fold(Fun, Acc) ->
+   ets:foldl(
+      fun(X) -> Fun({element(#clue.key, X), clue:val(X), clue:get(X)}, Acc) end,
+      Acc,
+      clue
+   ).
+
+
+
+
