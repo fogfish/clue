@@ -113,25 +113,13 @@ synchronize(S) ->
    
 key_to_list(Key)
  when is_tuple(Key) ->
-   string:join([element_to_list(X) || X <- tuple_to_list(Key)], "_");
+   string:join([format:scalar(X) || X <- tuple_to_list(Key)], "_");
 key_to_list(Key)
  when is_atom(Key) ->
    atom_to_list(Key);
 key_to_list(Key)
  when is_list(Key) ->
-   string:join([element_to_list(X) || X <- tuple_to_list(Key)], "_").
-
-element_to_list(X)
- when is_list(X) ->
-   X;
-element_to_list(X)
- when is_atom(X) ->
-   atom_to_list(X);
-
-element_to_list(X)
- when is_binary(X) ->
-   binary_to_list(X).
-
+   string:join([format:scalar(X) || X <- tuple_to_list(Key)], "_").
 
 peer(Peer) ->
    [Host, Port] = string:tokens(Peer, ":"),

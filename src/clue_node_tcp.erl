@@ -92,7 +92,7 @@ message({Peer, _}, Msg) ->
 
 metric_to_key(Peer, Metric) ->
    List = binary:split(Metric, [<<"_">>, <<"/">>], [global, trim]),
-   Host = inet_parse:ntoa(Peer),
+   Host = list_to_binary(inet_parse:ntoa(Peer)),
    list_to_tuple([Host | List]).
 
 
