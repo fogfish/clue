@@ -290,9 +290,9 @@ key(Prefix, Key)
 
 lit(Key)
  when is_tuple(Key) ->
-   list_to_binary(
-      string:join([format:scalar(X) || X <- tuple_to_list(Key)], ".")
-   );
+   [H | Tail] = tuple_to_list(Key),
+   List = [format:scalar(H) | [ [$/, format:scalar(X)] || X <- Tail] ],
+   list_to_binary(List);
 
 lit(Key)
  when is_atom(Key) ->
@@ -300,9 +300,8 @@ lit(Key)
 
 lit(Prefix, Key)
  when is_tuple(Key) ->
-   list_to_binary(
-      string:join([format:scalar(Prefix) | [format:scalar(X) || X <- tuple_to_list(Key)]], ".")
-   );
+   List = [format:scalar(Prefix) | [ [$/, format:scalar(X)] || X <- tuple_to_list(Key)] ],
+   list_to_binary(List);
 
 lit(Prefix, Key)
  when is_atom(Key) ->
