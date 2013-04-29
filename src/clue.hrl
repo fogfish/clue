@@ -6,8 +6,13 @@
 -define(DEBUG(Str, Args), ok).
 -endif.
 
+%%
+%% default fall-back metric
+-define(DEFAULT_METRIC(X, Y),  clue:gauge(X, Y)).
 
--define(CLUE_SYNC,  10000). 
+-define(CLUE_FLUSH,  10000). 
+-define(CLUE_SYNC,   10000). 
+
 -define(CLUE_TCP, [
    binary,
    {packet,  line},
@@ -16,11 +21,11 @@
 ]).
 
 
-%% clue entity
+%% clue metric
 -record(clue, {
-   type, %% entity type
-   key,  %% entity id
-   val,  %% entity raw value
-   ext   %% entity specific extension
+   type, %% metric type
+   key,  %% metric id
+   val,  %% metric raw value
+   time  %% metric time stamp 
 }).
 

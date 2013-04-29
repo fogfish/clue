@@ -18,6 +18,7 @@
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
+-include("clue.hrl").
 -export([
    start_link/0, init/1
 ]).
@@ -32,38 +33,38 @@ init([]) ->
    {ok,
       {
          {one_for_one, 4, 1800},
-         clue_node() ++ clue_peer()
+         clue_node() ++ clue_node_tcp() ++ clue_peer()
       }
    }.
 
 %%
-%%
 clue_node() ->
-   clue_node(opts:val(port, undefined, clue)).
-clue_node(undefined) ->
-   [];
-clue_node(native) ->
    [{
       clue_node,
-      {clue_node_native, start_link, []},
+      {clue_node, start_link, []},
       permanent, 60000, worker, dynamic
-   }];
-clue_node(Port)
- when is_number(Port) ->
+   }].
+
+%% local node, aggregates of statistic
+clue_node_tcp() ->
+   clue_node_tcp(opts:val(node, undefined, clue)).
+clue_node_tcp(undefined) ->
+   [];
+clue_node_tcp(Port) ->
    [{
-      clue_node,
+      clue_node_tcp,
       {clue_node_tcp, start_link, [Port]},
       permanent, 60000, worker, dynamic
    }].
 
-
-%%
-%%
+%% remote node, receives statistic
 clue_peer() ->
+   clue_peer(opts:val(peer, undefined, clue)).
+clue_peer(undefined) ->
+   [];
+clue_peer(Peer) ->
    [{
-      clue_peer,
-      {clue_peer_sup, start_link, []},
-      permanent, 60000, supervisor, dynamic
+      Peer,
+      {clue_peer_tcp, start_link, [Peer, opts:val(sync, ?CLUE_SYNC, clue)]},
+      permanent, 60000, worker, dynamic
    }].
-
-

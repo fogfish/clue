@@ -21,18 +21,19 @@
    start/0, start/1,
 
    %% define entities
-   counter/1, meter/1, blob/1, 
+   gauge/1, gauge/2, counter/1, counter/2, meter/1, meter/2, 
    
    %% counter api
-   put/2, put/3, put_/3, 
-   get/1, get/2, val/1, val/2,
+   put/2, put/3, 
+   get/1, get/2, getf/1,
    inc/1, inc/2, inc/3,
    dec/1, dec/2, dec/3,
 
-   usec/2,
+   %% batch api
+   lookup/1, fold/2, flush/2,
 
-   %% 
-   lookup/1, fold/2
+   %% utility
+   usec/2, key/1, key/2, lit/1, lit/2
 ]).
 
 %%
@@ -42,63 +43,67 @@ start(Cfg) -> applib:boot(?MODULE, Cfg).
 
 
 %%
-%% create counter
+%% instantaneous measurement of a value 
+-spec(gauge/1   :: (any()) -> ok).
+-spec(gauge/2   :: (any(), any()) -> ok).
+
+gauge(Key) ->
+   gauge(Key, 0).
+
+gauge(Key, Val) ->
+   _ = ets:insert(clue, metric(gauge, Key, Val)), 
+   ok.
+
+%%
+%% metric value is incremented or decremented, reset to 0 at flush
 -spec(counter/1 :: (any()) -> ok).
--spec(meter/1   :: (any()) -> ok).
--spec(blob/1    :: (any()) -> ok).
+-spec(counter/2 :: (any(), any()) -> ok).
 
 counter(Key) ->
-   _ = ets:insert(clue, 
-      #clue{
-         type = counter,
-         key  = Key, 
-         val  = 0
-      }
-   ),
+   counter(Key, 0).
+
+counter(Key, Val) ->
+   _ = ets:insert(clue, metric(counter, Key, Val)),
    ok.
+
+%%
+%% measures the rate of events per second
+-spec(meter/1   :: (any()) -> ok).
+-spec(meter/2   :: (any(), any()) -> ok).
 
 meter(Key) ->
-   _ = ets:insert(clue, 
-      #clue{
-         type = meter,
-         key  = Key, 
-         val  = 0, 
-         ext  = {erlang:now(), 0}
-      }
-   ),
+   meter(Key, 0).
+
+meter(Key, Val) ->
+   _ = ets:insert(clue, metric(meter, Key, Val)),
    ok.
 
-blob(Key) ->
-   _ = ets:insert(clue, 
-      #clue{
-         type = blob,
-         key  = Key, 
-         val  = <<>>
-      }
-   ),
-   ok.
+
+metric(Type, Key, Val) ->
+   #clue{
+      type = Type,
+      key  = Key,
+      val  = Val,
+      time = erlang:now()
+   }.
 
 %%
 %% put value
 -spec(put/2  :: (any(), any()) -> ok).
 -spec(put/3  :: (node(), any(), any()) -> ok).
--spec(put_/3 :: (node(), any(), any()) -> ok).
 
-put(Key, Val) ->
+put(Key, Val)
+ when is_atom(Key) orelse is_tuple(Key) ->
    case ets:update_element(clue, Key, {#clue.val, Val}) of
-      true  -> 
-         ok;
-      false -> 
-         % unable to update, key not found, fall-back to counter
-         counter(Key),
-         ets:update_element(clue, Key, {#clue.val, Val}),
-         ok
-   end.
+      true  -> ok;
+      false -> ?DEFAULT_METRIC(Key, Val)
+   end;
+
+put(Key, Val)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:put(X, Val) end, Key).
 
 put(Node, Key, Val) ->
-   rpc:call(Node, clue, put, [Key, Val]).
-
-put_(Node, Key, Val) ->
    rpc:cast(Node, clue, put, [Key, Val]).
 
 %%
@@ -106,43 +111,66 @@ put_(Node, Key, Val) ->
 -spec(get/1 :: (any()) -> any()).
 -spec(get/2 :: (node(), any()) -> any()).
 
+get(#clue{type=gauge, val=Val}) ->
+   Val;
+
 get(#clue{type=counter, val=Val}) ->
    Val;
 
-get(#clue{type=meter, key=Key, val=Val, ext={T, Last}}) ->
-   R = (Val - Last) / (timer:now_diff(erlang:now(), T) / 1000000),
-   %% ??? do update once 60 sec
-   _ = ets:update_element(clue, Key, {#clue.ext, {erlang:now(), Val}}),
-   R;
+get(#clue{type=meter, val=Val, time=T}) ->
+   Val / (timer:now_diff(erlang:now(), T) / 1000000);
 
-get(#clue{type=blob, val=Val}) ->
-   Val;
-
-get(Key) ->
+get(Key)
+ when is_atom(Key) orelse is_tuple(Key) ->
    case ets:lookup(clue, Key) of
       []  -> undefined;
       [E] -> clue:get(E)
-   end.
+   end;
+
+get(Key)
+ when is_list(Key) ->
+   [clue:get(X) || X <- Key].
 
 get(Node, Key) ->
    rpc:call(Node, clue, get, [Key]).
 
 %%
-%% get raw counter value
--spec(val/1 :: (any()) -> any()).
+%% get and flush counter
+-spec(getf/1 :: (any()) -> any()).
 
-val(#clue{val=Val}) ->
+getf(#clue{type=gauge, val=Val}) ->
    Val;
 
-val(Key) ->
-   try
-      ets:lookup_element(clue, Key, #clue.val)
-   catch _:badarg ->
-      undefined
-   end.
+getf(#clue{type=counter, key=Key, val=Val, time=T}) ->
+   Now = erlang:now(),
+   case (timer:now_diff(Now, T) div 1000) of
+      N when N > ?CLUE_FLUSH -> 
+         ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, Now}]);
+      _  -> 
+         ok
+   end,
+   Val;
 
-val(Node, Key) ->
-   rpc:call(Node, clue, val, [Key]).
+getf(#clue{type=meter, key=Key, val=Val, time=T}) ->
+   Now = erlang:now(),
+   case (timer:now_diff(Now, T) div 1000) of
+      N when N > ?CLUE_FLUSH ->
+         ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, Now}]);
+      _ -> 
+         ok
+   end,
+   Val / (timer:now_diff(Now, T) / 1000000);
+
+getf(Key)
+ when is_atom(Key) orelse is_tuple(Key) ->
+   case ets:lookup(clue, Key) of
+      []  -> undefined;
+      [E] -> clue:getf(E)
+   end;
+
+getf(Key)
+ when is_list(Key) ->
+   [clue:getf(X) || X <- Key].
 
 %%
 %% increment counter
@@ -150,45 +178,64 @@ val(Node, Key) ->
 -spec(inc/2 :: (any(), integer()) -> integer()).
 -spec(inc/3 :: (node(), any(), integer()) -> integer()).
 
-inc(Key) ->
+inc(Key)
+ when is_atom(Key) orelse is_tuple(Key) ->
    try
       ets:update_counter(clue, Key, 1)
    catch _:badarg ->
       undefined
-   end.
+   end;
 
-inc(Key, Val) ->
+inc(Key)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:inc(X) end, Key).
+
+inc(Key, Val)
+ when is_atom(Key) orelse is_tuple(Key) ->
    try
       ets:update_counter(clue, Key, Val)
    catch _:badarg ->
       undefined
-   end.
+   end;
+
+inc(Key, Val)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:inc(X, Val) end, Key).
 
 inc(Node, Key, Val) ->
-   rpc:call(Node, clue, inc, [Key, Val]).
+   rpc:cast(Node, clue, inc, [Key, Val]).
 
 %%
 %% decrement counter
 -spec(dec/1 :: (any()) -> integer()).
 -spec(dec/2 :: (any(), integer()) -> integer()).
 
-dec(Key) ->
+dec(Key)
+ when is_atom(Key) orelse is_tuple(Key) ->
    try
       ets:update_counter(clue, Key, -1)
    catch _:badarg ->
       undefined
-   end.
+   end;
 
-dec(Key, Val) ->
+dec(Key)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:dec(X) end, Key).
+
+dec(Key, Val)
+ when is_atom(Key) orelse is_tuple(Key) ->
    try
       ets:update_counter(clue, Key, -Val)
    catch _:badarg ->
       undefined
-   end.
+   end;
+
+dec(Key, Val)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:dec(X, Val) end, Key).
 
 dec(Node, Key, Val) ->
-   rpc:call(Node, clue, dec, [Key, Val]).
-
+   rpc:cast(Node, clue, dec, [Key, Val]).
 
 %%
 %% helper function to increment duration in usec
@@ -198,19 +245,67 @@ usec(Key, T) ->
    clue:inc(Key, timer:now_diff(erlang:now(), T)).
 
 %%
-%%
+%% lookup key(s) based on pattern
+-spec(lookup/1 :: (any()) -> list()).
+
 lookup(Key) ->
-   [{element(#clue.key, X), clue:val(X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
+   [{erlang:element(#clue.key, X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
 
 %%
-%%
-fold(Fun, Acc) ->
+%% fold function over dataset
+-spec(fold/2 :: (function(), any()) -> any()).
+
+fold(Fun, Acc0) ->
    ets:foldl(
-      fun(X) -> Fun({element(#clue.key, X), clue:val(X), clue:get(X)}, Acc) end,
-      Acc,
+      fun(X, Acc) -> Fun({erlang:element(#clue.key, X), clue:get(X)}, Acc) end,
+      Acc0,
       clue
    ).
 
+%%
+%% fold and flush function over dataset
+-spec(flush/2 :: (function(), any()) -> any()).
+
+flush(Fun, Acc0) ->
+   ets:foldl(
+      fun(X, Acc) -> Fun({erlang:element(#clue.key, X), clue:getf(X)}, Acc) end,
+      Acc0,
+      clue
+   ).
+
+%%
+%% 
+key(Key)
+ when is_binary(Key) ->
+   list_to_tuple(
+      binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
+   ).
+
+key(Prefix, Key)
+ when is_binary(Key) ->
+   list_to_tuple(
+      [Prefix | binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])]
+   ).
 
 
+lit(Key)
+ when is_tuple(Key) ->
+   list_to_binary(
+      string:join([format:scalar(X) || X <- tuple_to_list(Key)], ".")
+   );
 
+lit(Key)
+ when is_atom(Key) ->
+   atom_to_binary(Key, utf8).
+
+lit(Prefix, Key)
+ when is_tuple(Key) ->
+   list_to_binary(
+      string:join([format:scalar(Prefix) | [format:scalar(X) || X <- tuple_to_list(Key)]], ".")
+   );
+
+lit(Prefix, Key)
+ when is_atom(Key) ->
+   list_to_binary(
+      [format:scalar(Prefix), atom_to_binary(Key, utf8)]
+   ).

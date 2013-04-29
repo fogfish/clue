@@ -14,7 +14,7 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_node_native).
+-module(clue_node).
 -behaviour(gen_server).
 
 -export([

@@ -20,30 +20,28 @@
 -include("clue.hrl").
 
 -export([
-   start_link/3,
+   start_link/2,
    init/1, free/2, ioctl/2, ping/2, handle/2
 ]).
 
 %% internal state
 -record(srv, {
    peer,   % peer to synchronize 
-   mask,   % key mask to synchronize
    sync    % sync timeout
 }).
 
 %%
 %%
-start_link(Peer, Mask, Sync) ->
+start_link(Peer, Sync) ->
    knet:connect([
       {knet_tcp, ?CLUE_TCP},
-      {?MODULE,  [peer(Peer), Mask, Sync]}
+      {?MODULE,  [Peer, Sync]}
    ]).
 
-init([Peer, Mask, Sync]) ->
+init([Peer, Sync]) ->
    {ok, ping, 
       #srv{
          peer = Peer,
-         mask = Mask,
          sync = Sync
       },
       Sync
@@ -98,30 +96,10 @@ handle({tcp, Peer, {error, Reason}}, S) ->
 %%%----------------------------------------------------------------------------   
 
 synchronize(S) ->
-   % TODO: filter out any key originated by peer
-   list_to_binary(
-      lists:flatten(
-         lists:map(
-            fun({Key, Raw, _}) ->
-               io_lib:format("~s:~p|g\r\n", [key_to_list(Key), Raw]) 
-            end,
-            clue:lookup(S#srv.mask)
-         )
-      )
+   clue:flush(
+      fun({Key, Val}, Acc) ->
+         io_lib:format("~s:~p|g\r\n", [clue:lit(Key), Val]) 
+      end,
+      []
    ).
-
-   
-key_to_list(Key)
- when is_tuple(Key) ->
-   string:join([format:scalar(X) || X <- tuple_to_list(Key)], "_");
-key_to_list(Key)
- when is_atom(Key) ->
-   atom_to_list(Key);
-key_to_list(Key)
- when is_list(Key) ->
-   string:join([format:scalar(X) || X <- tuple_to_list(Key)], "_").
-
-peer(Peer) ->
-   [Host, Port] = string:tokens(Peer, ":"),
-   {Host, parser:int(Port)}.
 

@@ -24,7 +24,6 @@
    init/1, free/2, ioctl/2, handle/2
 ]).
 
-
 %%
 %%
 start_link(Port) ->
@@ -85,15 +84,11 @@ message({Peer, _}, Msg) ->
    ?DEBUG("clue tcp: ~p ~s", [Peer, Msg]),
    case binary:split(Msg, [<<":">>, <<"|">>], [global, trim]) of
       [Metric, Value, <<$g>>] ->
-         clue:put(metric_to_key(Peer, Metric), parser:scalar(Value));
+         Host = list_to_binary(inet_parse:ntoa(Peer)),
+         clue:put(clue:key(Host, Metric), parser:scalar(Value));
       _ ->
          ok
    end.
-
-metric_to_key(Peer, Metric) ->
-   List = binary:split(Metric, [<<"_">>, <<"/">>], [global, trim]),
-   Host = list_to_binary(inet_parse:ntoa(Peer)),
-   list_to_tuple([Host | List]).
 
 
 
