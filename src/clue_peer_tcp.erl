@@ -98,7 +98,7 @@ handle({tcp, Peer, {error, Reason}}, S) ->
 synchronize(S) ->
    clue:flush(
       fun({Key, Val}, Acc) ->
-         io_lib:format("~s:~p|g\r\n", [clue:lit(Key), Val]) 
+         [io_lib:format("~s:~p|g\r\n", [clue:lit(Key), Val]) | Acc]
       end,
       []
    ).
