@@ -21,7 +21,7 @@
    start/0, start/1,
 
    %% define entities
-   gauge/1, gauge/2, counter/1, counter/2, meter/1, meter/2, 
+   define/2, define/3, gauge/1, gauge/2, counter/1, counter/2, meter/1, meter/2, 
    
    %% counter api
    put/2, put/3, 
@@ -40,6 +40,16 @@
 %% start application
 start()    -> applib:boot(?MODULE, []).
 start(Cfg) -> applib:boot(?MODULE, Cfg).
+
+%%
+%% define
+-spec(define/2 :: (atom(), any()) -> ok).
+-spec(define/3 :: (atom(), any(), any()) -> ok).
+
+define(Type, Key) ->
+   define(Type, Key, 0).
+define(Type, Key, Val) ->
+   clue:Type(Key, Val).
 
 
 %%
@@ -249,6 +259,7 @@ usec(Key, T) ->
 -spec(lookup/1 :: (any()) -> list()).
 
 lookup(Key) ->
+   %% TODO: use select
    [{erlang:element(#clue.key, X), clue:get(X)} || X <- ets:match_object(clue, {clue, '_', Key, '_', '_'})].
 
 %%
@@ -277,14 +288,16 @@ flush(Fun, Acc0) ->
 %% 
 key(Key)
  when is_binary(Key) ->
-   list_to_tuple(
-      binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
-   ).
+   list_to_tuple(parse_key(Key)).
 
 key(Prefix, Key)
  when is_binary(Key) ->
-   list_to_tuple(
-      [Prefix | binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])]
+   list_to_tuple([Prefix | parse_key(Key)]).
+
+parse_key(Key) ->
+   lists:map(
+      fun(<<$*>>) -> '_'; (X) -> X end,
+      binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
    ).
 
 
