@@ -25,29 +25,24 @@
 ]).
 
 start(_Type, _Args) ->
-   {ok, Sup} = clue_sup:start_link(),
-   % create clue repository
-   _  = ets:new(clue, [
-      public, 
-      named_table, 
-      {write_concurrency, true}, 
-      {read_concurrency,  true},
-      {keypos,       #clue.key}
-   ]),
-   
-   lists:foreach(fun default_entity/1, opts:val(default, [], clue)),
-   {ok, Sup}.
+   clue_storage(),
+   clue_sup:start_link().
 
 stop(_State) ->
    ok.
 
+%%
+%% clue storage
+clue_storage() ->
+   _  = ets:new(clue, [
+      public, 
+      named_table, 
+      ordered_set, 
+      {write_concurrency, true}, 
+      {read_concurrency,  true},
+      {keypos,       #clue.key}
+   ]).
 
-default_entity({counter, X}) ->
-   clue:counter(X);
-default_entity({meter,   X}) ->
-   clue:meter(X);
-default_entity({blob,    X}) ->
-   clue:blob(X).
 
 
 

@@ -14,7 +14,10 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_node).
+%%   @description
+%%      node system status
+%%
+-module(clue_sys).
 -behaviour(gen_server).
 
 -export([
@@ -23,13 +26,13 @@
    init/1, terminate/2, handle_call/3, handle_cast/2, handle_info/2, code_change/3
 ]).
 
-
 %%
 %%
 start_link() ->
    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
+   sys_memory(),
    {ok, undefined}.
 
 terminate(_, _) ->
@@ -53,10 +56,6 @@ handle_cast(_, S) ->
 
 %%
 %% 
-handle_info({clue, Key, Val}, S) ->
-   clue:put(Key, Val),
-   {noreply, S};
-
 handle_info(_, S) ->
    {noreply, S}.
 
@@ -65,6 +64,25 @@ handle_info(_, S) ->
 code_change(_Vsn, S, _Extra) ->
    {ok, S}.   
 
+%%%----------------------------------------------------------------------------   
+%%%
+%%% gen_server
+%%%
+%%%----------------------------------------------------------------------------   
+
+%% 
+%% system status
+sys_memory() ->
+   sys_memory(total),      % The total amount of memory currently allocated (in bytes).
+   sys_memory(processes),  % The total amount of memory currently allocated by the Erlang processes.
+   sys_memory(system),     % The total amount of memory currently allocated by the emulator
+   sys_memory(atom),       % The total amount of memory currently allocated for atoms.
+   sys_memory(binary),     % The total amount of memory currently allocated for binaries.
+   sys_memory(code),       % The total amount of memory currently allocated for Erlang code.
+   sys_memory(ets).        % The total amount of memory currently allocated for ets tables.
+
+sys_memory(X) ->
+   clue:functor({erlang:node(), memory, X}, fun() -> erlang:memory(X) end).
 
 
 
