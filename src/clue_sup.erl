@@ -33,7 +33,7 @@ init([]) ->
    {ok,
       {
          {one_for_one, 4, 1800},
-         [sys()]
+         [sys()] ++ httpd()
       }
    }.
 
@@ -45,6 +45,21 @@ sys() ->
       {clue_sys, start_link, []},
       permanent, 60000, worker, dynamic
    }.
+
+%%
+%%
+httpd() ->
+   case opts:val(httpd, undefined, clue) of
+      undefined -> 
+         [];
+      Port ->
+         [{
+            httpd,
+            {clue_httpd_sup, start_link, [Port]},
+            permanent, 60000, supervisor, dynamic
+         }]
+   end.
+
 
 
 % %%

@@ -33,6 +33,7 @@ start_link() ->
 
 init(_) ->
    sys_memory(),
+   sys_process(),
    {ok, undefined}.
 
 terminate(_, _) ->
@@ -71,7 +72,7 @@ code_change(_Vsn, S, _Extra) ->
 %%%----------------------------------------------------------------------------   
 
 %% 
-%% system status
+%% VM status
 sys_memory() ->
    sys_memory(total),      % The total amount of memory currently allocated (in bytes).
    sys_memory(processes),  % The total amount of memory currently allocated by the Erlang processes.
@@ -84,5 +85,9 @@ sys_memory() ->
 sys_memory(X) ->
    clue:functor({erlang:node(), memory, X}, fun() -> erlang:memory(X) end).
 
+%%
+%% VM processes
+sys_process() ->
+   clue:functor({erlang:node(), process, count}, fun() -> erlang:system_info(process_count) end).   
 
 
