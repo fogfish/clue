@@ -102,8 +102,15 @@ handle_request(eof, {'GET', <<"/_sys/clue">>, _}, S) ->
    ok = gen_tcp:send(S#httpd.sock, Pckt),
    {stop, normal, S#httpd{dec=htstream:new()}};      
 
-handle_request(eof, {'GET', <<"/_sys/clue/", Pfx/binary>>, _}, S) ->
-   Msg = sys_clue(binary_to_existing_atom(Pfx, utf8)),
+handle_request(eof, {'GET', <<"/_sys/clue/prefix/", Pfx/binary>>, _}, S) ->
+   Msg = sys_clue_prefix(binary_to_existing_atom(Pfx, utf8)),
+   Heads = [{'Server', <<"clue">>}, {'Content-Length', size(Msg)}, {'Content-Type', 'text/plain'}],
+   {Pckt, _, _} = htstream:encode({200, Heads, Msg}, htstream:new()),
+   ok = gen_tcp:send(S#httpd.sock, Pckt),
+   {stop, normal, S#httpd{dec=htstream:new()}};      
+
+handle_request(eof, {'GET', <<"/_sys/clue/value/", Urn/binary>>, _}, S) ->
+   Msg = sys_clue_value(Urn),
    Heads = [{'Server', <<"clue">>}, {'Content-Length', size(Msg)}, {'Content-Type', 'text/plain'}],
    {Pckt, _, _} = htstream:encode({200, Heads, Msg}, htstream:new()),
    ok = gen_tcp:send(S#httpd.sock, Pckt),
@@ -142,7 +149,7 @@ sys_clue() ->
    ).
 
 %% sys clue
-sys_clue(Pfx) ->
+sys_clue_prefix(Pfx) ->
    iolist_to_binary(
       lists:map(
          fun({Key, Val}) ->
@@ -151,6 +158,14 @@ sys_clue(Pfx) ->
          clue:prefix(Pfx)
       )
    ).
+
+sys_clue_value(Urn) ->
+   Key = list_to_tuple(
+      [binary_to_existing_atom(X, utf8) 
+         || X <- binary:split(Urn, [<<"_">>, <<"/">>, <<".">>, <<":">>], [global, trim])]
+   ),
+   scalar:s(clue:get(Key)).
+
 
 urn(Key)
  when is_tuple(Key) ->
