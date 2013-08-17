@@ -20,7 +20,8 @@
 
 -include("clue.hrl").
 -export([
-   start_link/0, init/1
+   start_link/0, 
+   init/1
 ]).
 
 %%
@@ -33,63 +34,6 @@ init([]) ->
    {ok,
       {
          {one_for_one, 4, 1800},
-         [sys()] ++ httpd()
+         []
       }
    }.
-
-%%
-%%
-sys() ->
-   {
-      sys,
-      {clue_sys, start_link, []},
-      permanent, 60000, worker, dynamic
-   }.
-
-%%
-%%
-httpd() ->
-   case opts:val(httpd, undefined, clue) of
-      undefined -> 
-         [];
-      Port ->
-         [{
-            httpd,
-            {clue_httpd_sup, start_link, [Port]},
-            permanent, 60000, supervisor, dynamic
-         }]
-   end.
-
-
-
-% %%
-% clue_node() ->
-%    [{
-%       clue_node,
-%       {clue_node, start_link, []},
-%       permanent, 60000, worker, dynamic
-%    }].
-
-% %% local node, aggregates of statistic
-% clue_node_tcp() ->
-%    clue_node_tcp(opts:val(node, undefined, clue)).
-% clue_node_tcp(undefined) ->
-%    [];
-% clue_node_tcp(Port) ->
-%    [{
-%       clue_node_tcp,
-%       {clue_node_tcp, start_link, [Port]},
-%       permanent, 60000, worker, dynamic
-%    }].
-
-% %% remote node, receives statistic
-% clue_peer() ->
-%    clue_peer(opts:val(peer, undefined, clue)).
-% clue_peer(undefined) ->
-%    [];
-% clue_peer(Peer) ->
-%    [{
-%       Peer,
-%       {clue_peer_tcp, start_link, [Peer, opts:val(sync, ?CLUE_SYNC, clue)]},
-%       permanent, 60000, worker, dynamic
-%    }].

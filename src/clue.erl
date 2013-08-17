@@ -14,91 +14,67 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
+%% @description
+%%   system status / statistic repository
+%%    * gauge   - the simplest metric type, it just contain a value.
+%%    * counter - monotonically increasing 64-bit integer.
+%%    * meter   - reflects the rate at which a set of events occur
+%%    * measure - measures are like a meter except that passed values are monotonically increasing values
+%%                read from external sources e.g. OS/VM counters
 -module(clue).
 -include("clue.hrl").
 
+-export([start/0]).
 -export([
-   start/0, start/1,
-
-   %% define counters
-   define/2, define/3,
-   gauge/1, gauge/2, 
-   counter/1, counter/2, 
-   meter/1, meter/2, 
-   functor/2,
-
+   define/2, 
+   define/3,
    %% update counter
-   put/2, put/3, 
-   get/1, get/2, 
-   inc/1, inc/2, inc/3,
-   dec/1, dec/2, dec/3,
-
+   put/2, 
+   put/3, 
+   get/1, 
+   get/2, 
+   inc/1, 
+   inc/2, 
+   inc/3,
+   dec/1, 
+   dec/2, 
+   dec/3,
    %% query counters
-   prefix/1, lookup/1, fold/2,
-
+   prefix/1, 
+   lookup/1, 
+   fold/2,
    %% utility
-   usec/2, key/1, key/2, lit/1, lit/2
+   usec/2%, key/1, key/2, lit/1, lit/2
 ]).
 
 %%
-%% start application
-start()    -> applib:boot(?MODULE, []).
-start(Cfg) -> applib:boot(?MODULE, Cfg).
+%%
+-type(metric() :: gauge | counter | meter | measure).
+-type(key()    :: tuple()).
+-type(ttl()    :: timeout()).
 
 %%
-%% define 
--spec(define/2 :: (atom(), any()) -> ok).
--spec(define/3 :: (atom(), any(), any()) -> ok).
+%% start application
+start() -> 
+   applib:boot(?MODULE, []).
+
+%%
+%% define new metric / reset existed
+-spec(define/2 :: (metric(), key()) -> ok).
+-spec(define/3 :: (metric(), key(), ttl()) -> ok).
 
 define(Type, Key) ->
-   define(Type, Key, 0).
-define(Type, Key, Val) ->
-   _ = ets:insert(clue, metric(Type, Key, Val)),
+   _ = ets:insert(clue, metric(Type, Key, infinity)),
+   ok.
+define(Type, Key, TTL) ->
+   _ = ets:insert(clue, metric(Type, Key, TTL * 1000)),
    ok.
 
-%%
-%% instantaneous measurement of a value 
--spec(gauge/1   :: (any()) -> ok).
--spec(gauge/2   :: (any(), any()) -> ok).
-
-gauge(Key) ->
-   gauge(Key, 0).
-
-gauge(Key, Val) ->
-   _ = ets:insert(clue, metric(gauge, Key, Val)), 
-   ok.
-
-%%
-%% metric value is incremented or decremented, reset to 0 at flush
--spec(counter/1 :: (any()) -> ok).
--spec(counter/2 :: (any(), any()) -> ok).
-
-counter(Key) ->
-   counter(Key, 0).
-
-counter(Key, Val) ->
-   _ = ets:insert(clue, metric(counter, Key, Val)),
-   ok.
-
-%%
-%% measures the rate of events per second
--spec(meter/1   :: (any()) -> ok).
--spec(meter/2   :: (any(), any()) -> ok).
-
-meter(Key) ->
-   meter(Key, 0).
-
-meter(Key, Val) ->
-   _ = ets:insert(clue, metric(meter, Key, Val)),
-   ok.
-
-%%
-%% dynamically calculated metric (e.g. wrapper to other subsystem) 
--spec(functor/2 :: (any(), function()) -> ok).
-
-functor(Key, Fun) ->
-   _ = ets:insert(clue, metric(functor, Key, Fun)),
-   ok.
+%%%----------------------------------------------------------------------------   
+%%%
+%%% setters / getters
+%%%
+%%%----------------------------------------------------------------------------   
 
 %%
 %% put value / reset counter to initial state
@@ -120,32 +96,59 @@ put(Node, Key, Val) ->
    rpc:cast(Node, clue, put, [Key, Val]).
 
 %%
-%% get counter value
+%% get metric value
 -spec(get/1 :: (any()) -> any()).
 -spec(get/2 :: (node(), any()) -> any()).
 
 get(#clue{type=gauge, val=Val}) ->
    Val;
 
-get(#clue{type=counter, val=Val}) ->
+
+get(#clue{type=counter, val=Val, ttl=infinity}) ->
    Val;
 
-get(#clue{type=meter, key=Key, val=Val, time=T, ttl=TTL}) ->
-   case erlang:now() of
+get(#clue{type=counter, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
+   case os:timestamp() of
+      %% TTL is not expired, current value is not flushed
       X when X < TTL ->
-         Val / (timer:now_diff(erlang:now(), T) / 1000000);
+         sub(Val, Last);
+      %% TTL is expired shift current value
       X ->
-         New = tempus:inc(X, opts:val(ttl, ?CONFIG_TTL, clue)),
-         ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, X}, {#clue.ttl, New}]),
-         Val / (timer:now_diff(erlang:now(), T) / 1000000)
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
+         sub(Val, Last)
    end;
 
-get(#clue{type=functor, val=Fun}) 
- when is_function(Fun) ->
-   Fun();
 
-get(#clue{type=functor, val=Val}) ->
-   Val;
+get(#clue{type=meter, val=Val, time=T, ttl=infinity}) ->
+   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
+
+get(#clue{type=meter, key=Key, val=Val, time=T, ttl=TTL}) ->
+   case os:timestamp() of
+      X when X < TTL ->
+         Val / (timer:now_diff(X, T) / 1000000);
+      X ->
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, X}, {#clue.ttl, NTTL}]),
+         Val / (timer:now_diff(X, T) / 1000000)
+   end;
+
+
+get(#clue{type=measure, val=Val,  time=T, ttl=infinity}) ->
+   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
+
+get(#clue{type=measure, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
+   case os:timestamp() of
+      %% TTL is not expired, current value is not flushed
+      X when X < TTL ->
+         sub(Val, Last) / (timer:now_diff(X, T) / 1000000);
+      %% TTL is expired shift current value
+      X ->
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
+         sub(Val, Last) / (timer:now_diff(X, T) / 1000000)
+   end;
+
 
 get(Key)
  when is_atom(Key) orelse is_tuple(Key) ->
@@ -214,7 +217,7 @@ dec(Node, Key, Val) ->
 
 prefix(Key)
  when is_tuple(Key) ->
-   %% ensure that only keys partial match are selected 
+   %% ensure that only key partial match is selected 
    Prefix = lists:map(
       fun(X) ->
          {'=:=', {element, X, {element, #clue.key, '$1'}}, erlang:element(X, Key)}
@@ -254,14 +257,6 @@ lookup(Key) ->
    end.
 
 %%
-%% helper function to increment duration in usec
--spec(usec/2 :: (any(), any()) -> ok).
-
-usec(Key, T) ->
-   clue:inc(Key, timer:now_diff(erlang:now(), T)).
-
-
-%%
 %% fold function over dataset
 -spec(fold/2 :: (function(), any()) -> any()).
 
@@ -273,42 +268,51 @@ fold(Fun, Acc0) ->
    ).
 
 %%
-%% 
-key(Key)
- when is_binary(Key) ->
-   list_to_tuple(parse_key(Key)).
+%% helper function to increment duration in usec
+-spec(usec/2 :: (any(), any()) -> ok).
 
-key(Prefix, Key)
- when is_binary(Key) ->
-   list_to_tuple([Prefix | parse_key(Key)]).
-
-parse_key(Key) ->
-   lists:map(
-      fun(<<$*>>) -> '_'; (X) -> X end,
-      binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
-   ).
+usec(Key, T) ->
+   clue:inc(Key, timer:now_diff(os:timestamp(), T)).
 
 
-lit(Key)
- when is_tuple(Key) ->
-   [H | Tail] = tuple_to_list(Key),
-   List = [format:scalar(H) | [ [$/, format:scalar(X)] || X <- Tail] ],
-   list_to_binary(List);
 
-lit(Key)
- when is_atom(Key) ->
-   atom_to_binary(Key, utf8).
+% %%
+% %% 
+% key(Key)
+%  when is_binary(Key) ->
+%    list_to_tuple(parse_key(Key)).
 
-lit(Prefix, Key)
- when is_tuple(Key) ->
-   List = [format:scalar(Prefix) | [ [$/, format:scalar(X)] || X <- tuple_to_list(Key)] ],
-   list_to_binary(List);
+% key(Prefix, Key)
+%  when is_binary(Key) ->
+%    list_to_tuple([Prefix | parse_key(Key)]).
 
-lit(Prefix, Key)
- when is_atom(Key) ->
-   list_to_binary(
-      [format:scalar(Prefix), atom_to_binary(Key, utf8)]
-   ).
+% parse_key(Key) ->
+%    lists:map(
+%       fun(<<$*>>) -> '_'; (X) -> X end,
+%       binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
+%    ).
+
+
+% lit(Key)
+%  when is_tuple(Key) ->
+%    [H | Tail] = tuple_to_list(Key),
+%    List = [format:scalar(H) | [ [$/, format:scalar(X)] || X <- Tail] ],
+%    list_to_binary(List);
+
+% lit(Key)
+%  when is_atom(Key) ->
+%    atom_to_binary(Key, utf8).
+
+% lit(Prefix, Key)
+%  when is_tuple(Key) ->
+%    List = [format:scalar(Prefix) | [ [$/, format:scalar(X)] || X <- tuple_to_list(Key)] ],
+%    list_to_binary(List);
+
+% lit(Prefix, Key)
+%  when is_atom(Key) ->
+%    list_to_binary(
+%       [format:scalar(Prefix), atom_to_binary(Key, utf8)]
+%    ).
 
 
 %%%----------------------------------------------------------------------------   
@@ -317,17 +321,42 @@ lit(Prefix, Key)
 %%%
 %%%----------------------------------------------------------------------------   
 
+%%
 %% create new metric
-metric(Type, Key, Val) ->
+metric(Type, Key, TTL) ->
    #clue{
-      type = Type,
-      key  = Key,
-      val  = Val,
-      time = erlang:now(),
-      ttl  = tempus:inc(erlang:now(), opts:val(ttl, ?CONFIG_TTL, clue))
+      type  = Type,
+      key   = Key,
+      val   = 0,
+      time  = usec(),
+      ttl   = tinc(usec(), TTL),
+      state = undefined 
    }.
 
+usec() ->
+   os:timestamp().
 
+%%
+%% sum time stamps
+tinc(_, infinity) ->
+   infinity;
+tinc({Msec, Sec, Usec}, T)
+ when is_integer(T) ->
+   case Usec + T of
+      X when X =< 1000000 ->
+         {Msec, Sec, X};
+      X when X =< 1000000 * 1000000 ->
+         {Msec, Sec + (X div 1000000), X rem 1000000};
+      X ->
+         {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
+   end.
+
+%%
+%% sub  
+sub(X, undefined) ->
+   X;
+sub(X, Y) ->
+   X - Y.
 
 
 

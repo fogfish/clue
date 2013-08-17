@@ -18,11 +18,12 @@
 %%
 %% clue metric
 -record(clue, {
-   type, %% metric type
-   key,  %% metric id
-   val,  %% metric raw value
-   time, %% metric time stamp 
-   ttl   %% time-to-live
+   type,  %% metric type
+   key,   %% metric id
+   val,   %% metric raw value
+   time,  %% metric time stamp 
+   ttl,   %% time-to-live
+   state  %% metric state
 }).
 
 
