@@ -360,8 +360,8 @@ tinc({Msec, Sec, Usec}, T)
 
 %%
 %% sub  
-sub(X, undefined) ->
-   X;
+sub(_, undefined) ->
+   0;
 sub(X, Y) ->
    X - Y.
 
