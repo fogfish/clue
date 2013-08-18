@@ -77,25 +77,6 @@ define(Type, Key, TTL) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% put value / reset counter to initial state
--spec(put/2  :: (any(), any()) -> ok).
--spec(put/3  :: (node(), any(), any()) -> ok).
-
-put(Key, Val)
- when is_atom(Key) orelse is_tuple(Key) ->
-   case ets:update_element(clue, Key, {#clue.val, Val}) of
-      true  -> ok;
-      false -> ?DEFAULT_METRIC(Key, Val)
-   end;
-
-put(Key, Val)
- when is_list(Key) ->
-   lists:foreach(fun(X) -> clue:put(X, Val) end, Key).
-
-put(Node, Key, Val) ->
-   rpc:cast(Node, clue, put, [Key, Val]).
-
-%%
 %% get metric value
 -spec(get/1 :: (any()) -> any()).
 -spec(get/2 :: (node(), any()) -> any()).
@@ -163,6 +144,32 @@ get(Key)
 
 get(Node, Key) ->
    rpc:call(Node, clue, get, [Key]).
+
+
+%%
+%% put value / reset counter to initial state 
+%% return counter value 
+-spec(put/2  :: (any(), any()) -> any()).
+-spec(put/3  :: (node(), any(), any()) -> any()).
+
+put(Key, Val)
+ when is_atom(Key) orelse is_tuple(Key) ->
+   case ets:update_element(clue, Key, {#clue.val, Val}) of
+      true  -> 
+         Val;
+      false -> 
+         ?DEFAULT_METRIC(Key), 
+         clue:put(Key, Val)
+   end;
+
+put(Key, Val)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:put(X, Val) end, Key),
+   Val.
+
+put(Node, Key, Val) ->
+   rpc:cast(Node, clue, put, [Key, Val]).
+
 
 %%
 %% increment counter

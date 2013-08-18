@@ -13,7 +13,7 @@
 
 %%
 %% default fall-back metric
--define(DEFAULT_METRIC(X, Y),  clue:gauge(X, Y)).
+-define(DEFAULT_METRIC(X),  clue:define(gauge, X)).
 
 %%
 %% clue metric
