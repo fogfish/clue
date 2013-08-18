@@ -17,6 +17,7 @@
 
 %%
 %% clue metric
+%% change clue:lookup(...) if size of tuple is changed
 -record(clue, {
    type,  %% metric type
    key,   %% metric id

@@ -252,7 +252,7 @@ prefix(Key) ->
 
 lookup(Key) ->
    Query  = [{
-      {clue, '_', Key, '_', '_', '_'},
+      {clue, '_', Key, '_', '_', '_', '_'},
       [],
       ['$_']
    }],
