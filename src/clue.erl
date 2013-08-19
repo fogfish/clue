@@ -31,6 +31,7 @@
    %% update counter
    put/2, 
    put/3, 
+   putt/4,
    get/1, 
    get/2, 
    inc/1, 
@@ -169,6 +170,26 @@ put(Key, Val)
 
 put(Node, Key, Val) ->
    rpc:cast(Node, clue, put, [Key, Val]).
+
+%%
+%% define and put value  
+-spec(putt/4  :: (metric(), key(), any(), ttl()) -> any()).
+
+putt(Type, Key, Val, TTL)
+ when is_atom(Key) orelse is_tuple(Key) ->
+   case ets:update_element(clue, Key, {#clue.val, Val}) of
+      true  -> 
+         Val;
+      false -> 
+         clue:define(Type, Key, TTL),
+         clue:put(Key, Val)
+   end;
+
+putt(Type, Key, Val, TTL)
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:putt(Type, X, Val, TTL) end, Key),
+   Val.
+
 
 
 %%
