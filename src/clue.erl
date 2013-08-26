@@ -355,7 +355,7 @@ metric(Type, Key, TTL) ->
    #clue{
       type  = Type,
       key   = Key,
-      val   = 0,
+      val   = undefined,
       time  = usec(),
       ttl   = tinc(usec(), TTL),
       state = undefined 
