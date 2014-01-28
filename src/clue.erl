@@ -103,16 +103,16 @@ get(#clue{type=counter, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
 
 
 get(#clue{type=meter, val=Val, time=T, ttl=infinity}) ->
-   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
+   val(Val) / (timer:now_diff(os:timestamp(), T) / 1000000);
 
 get(#clue{type=meter, key=Key, val=Val, time=T, ttl=TTL}) ->
    case os:timestamp() of
       X when X < TTL ->
-         Val / (timer:now_diff(X, T) / 1000000);
+         val(Val) / (timer:now_diff(X, T) / 1000000);
       X ->
          NTTL = tinc(X, timer:now_diff(TTL, T)),
          ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, X}, {#clue.ttl, NTTL}]),
-         Val / (timer:now_diff(X, T) / 1000000)
+         val(Val) / (timer:now_diff(X, T) / 1000000)
    end;
 
 
@@ -386,6 +386,12 @@ sub(_, undefined) ->
 sub(X, Y) ->
    X - Y.
 
+%%
+%% maybe val
+val(undefined) ->
+   0;
+val(X) ->
+   X.
 
 
 
