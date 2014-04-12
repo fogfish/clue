@@ -31,7 +31,6 @@
    %% update counter
    put/2, 
    put/3, 
-   putt/4,
    get/1, 
    get/2, 
    inc/1, 
@@ -65,10 +64,10 @@ start() ->
 -spec(define/3 :: (metric(), key(), ttl()) -> ok).
 
 define(Type, Key) ->
-   _ = ets:insert(clue, metric(Type, Key, infinity)),
+   _ = ets:insert_new(clue, metric(Type, Key, infinity)),
    ok.
 define(Type, Key, TTL) ->
-   _ = ets:insert(clue, metric(Type, Key, TTL * 1000)),
+   _ = ets:insert_new(clue, metric(Type, Key, erlang:trunc(TTL * 1000))),
    ok.
 
 %%%----------------------------------------------------------------------------   
@@ -85,7 +84,6 @@ define(Type, Key, TTL) ->
 get(#clue{type=gauge, val=Val}) ->
    Val;
 
-
 get(#clue{type=counter, val=Val, ttl=infinity}) ->
    Val;
 
@@ -93,26 +91,26 @@ get(#clue{type=counter, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
    case os:timestamp() of
       %% TTL is not expired, current value is not flushed
       X when X < TTL ->
-         sub(Val, Last);
+         Val - Last;
       %% TTL is expired shift current value
       X ->
          NTTL = tinc(X, timer:now_diff(TTL, T)),
          ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
-         sub(Val, Last)
+         Val - Last
    end;
 
 
 get(#clue{type=meter, val=Val, time=T, ttl=infinity}) ->
-   val(Val) / (timer:now_diff(os:timestamp(), T) / 1000000);
+   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
 
 get(#clue{type=meter, key=Key, val=Val, time=T, ttl=TTL}) ->
    case os:timestamp() of
       X when X < TTL ->
-         val(Val) / (timer:now_diff(X, T) / 1000000);
+         Val / (timer:now_diff(X, T) / 1000000);
       X ->
          NTTL = tinc(X, timer:now_diff(TTL, T)),
          ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, X}, {#clue.ttl, NTTL}]),
-         val(Val) / (timer:now_diff(X, T) / 1000000)
+         Val / (timer:now_diff(X, T) / 1000000)
    end;
 
 
@@ -123,25 +121,24 @@ get(#clue{type=measure, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
    case os:timestamp() of
       %% TTL is not expired, current value is not flushed
       X when X < TTL ->
-         sub(Val, Last) / (timer:now_diff(X, T) / 1000000);
+         (Val - Last) / (timer:now_diff(X, T) / 1000000);
       %% TTL is expired shift current value
       X ->
          NTTL = tinc(X, timer:now_diff(TTL, T)),
          ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
-         sub(Val, Last) / (timer:now_diff(X, T) / 1000000)
-   end;
-
-
-get(Key)
- when is_atom(Key) orelse is_tuple(Key) ->
-   case ets:lookup(clue, Key) of
-      []  -> undefined;
-      [E] -> clue:get(E)
+         (Val - Last) / (timer:now_diff(X, T) / 1000000)
    end;
 
 get(Key)
  when is_list(Key) ->
-   [clue:get(X) || X <- Key].
+   [clue:get(X) || X <- Key];
+
+get(Key) ->
+   case ets:lookup(clue, Key) of
+      []  -> undefined;
+      [E] -> clue:get(E)
+   end.
+
 
 get(Node, Key) ->
    rpc:call(Node, clue, get, [Key]).
@@ -154,42 +151,21 @@ get(Node, Key) ->
 -spec(put/3  :: (node(), any(), any()) -> any()).
 
 put(Key, Val)
- when is_atom(Key) orelse is_tuple(Key) ->
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:put(X, Val) end, Key),
+   Val;
+
+put(Key, Val) ->
    case ets:update_element(clue, Key, {#clue.val, Val}) of
       true  -> 
          Val;
       false -> 
          ?DEFAULT_METRIC(Key), 
          clue:put(Key, Val)
-   end;
-
-put(Key, Val)
- when is_list(Key) ->
-   lists:foreach(fun(X) -> clue:put(X, Val) end, Key),
-   Val.
+   end.
 
 put(Node, Key, Val) ->
    rpc:cast(Node, clue, put, [Key, Val]).
-
-%%
-%% define and put value  
--spec(putt/4  :: (metric(), key(), any(), ttl()) -> any()).
-
-putt(Type, Key, Val, TTL)
- when is_atom(Key) orelse is_tuple(Key) ->
-   case ets:update_element(clue, Key, {#clue.val, Val}) of
-      true  -> 
-         Val;
-      false -> 
-         clue:define(Type, Key, TTL),
-         clue:put(Key, Val)
-   end;
-
-putt(Type, Key, Val, TTL)
- when is_list(Key) ->
-   lists:foreach(fun(X) -> clue:putt(Type, X, Val, TTL) end, Key),
-   Val.
-
 
 
 %%
@@ -202,16 +178,15 @@ inc(Key) ->
    inc(Key, 1).
 
 inc(Key, Val)
- when is_atom(Key) orelse is_tuple(Key) ->
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:inc(X, Val) end, Key);
+
+inc(Key, Val) ->
    try
       ets:update_counter(clue, Key, Val)
    catch _:badarg ->
       undefined
-   end;
-
-inc(Key, Val)
- when is_list(Key) ->
-   lists:foreach(fun(X) -> clue:inc(X, Val) end, Key).
+   end.
 
 inc(Node, Key, Val) ->
    rpc:cast(Node, clue, inc, [Key, Val]).
@@ -225,16 +200,15 @@ dec(Key) ->
    dec(Key, 1).
 
 dec(Key, Val)
- when is_atom(Key) orelse is_tuple(Key) ->
+ when is_list(Key) ->
+   lists:foreach(fun(X) -> clue:dec(X, Val) end, Key);
+
+dec(Key, Val) ->
    try
       ets:update_counter(clue, Key, -Val)
    catch _:badarg ->
       undefined
-   end;
-
-dec(Key, Val)
- when is_list(Key) ->
-   lists:foreach(fun(X) -> clue:dec(X, Val) end, Key).
+   end.
 
 dec(Node, Key, Val) ->
    rpc:cast(Node, clue, dec, [Key, Val]).
@@ -303,46 +277,6 @@ usec(Key, T) ->
    clue:inc(Key, timer:now_diff(os:timestamp(), T)).
 
 
-
-% %%
-% %% 
-% key(Key)
-%  when is_binary(Key) ->
-%    list_to_tuple(parse_key(Key)).
-
-% key(Prefix, Key)
-%  when is_binary(Key) ->
-%    list_to_tuple([Prefix | parse_key(Key)]).
-
-% parse_key(Key) ->
-%    lists:map(
-%       fun(<<$*>>) -> '_'; (X) -> X end,
-%       binary:split(Key, [<<"_">>, <<"/">>, <<".">>], [global, trim])
-%    ).
-
-
-% lit(Key)
-%  when is_tuple(Key) ->
-%    [H | Tail] = tuple_to_list(Key),
-%    List = [format:scalar(H) | [ [$/, format:scalar(X)] || X <- Tail] ],
-%    list_to_binary(List);
-
-% lit(Key)
-%  when is_atom(Key) ->
-%    atom_to_binary(Key, utf8).
-
-% lit(Prefix, Key)
-%  when is_tuple(Key) ->
-%    List = [format:scalar(Prefix) | [ [$/, format:scalar(X)] || X <- tuple_to_list(Key)] ],
-%    list_to_binary(List);
-
-% lit(Prefix, Key)
-%  when is_atom(Key) ->
-%    list_to_binary(
-%       [format:scalar(Prefix), atom_to_binary(Key, utf8)]
-%    ).
-
-
 %%%----------------------------------------------------------------------------   
 %%%
 %%% private
@@ -355,10 +289,10 @@ metric(Type, Key, TTL) ->
    #clue{
       type  = Type,
       key   = Key,
-      val   = undefined,
+      val   = 0,
       time  = usec(),
       ttl   = tinc(usec(), TTL),
-      state = undefined 
+      state = 0 
    }.
 
 usec() ->
@@ -378,20 +312,5 @@ tinc({Msec, Sec, Usec}, T)
       X ->
          {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
    end.
-
-%%
-%% sub  
-sub(_, undefined) ->
-   0;
-sub(X, Y) ->
-   X - Y.
-
-%%
-%% maybe val
-val(undefined) ->
-   0;
-val(X) ->
-   X.
-
 
 
