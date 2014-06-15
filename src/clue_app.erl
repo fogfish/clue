@@ -21,26 +21,27 @@
 -include("clue.hrl").
 
 -export([
-   start/2, stop/1
+   start/2
+  ,stop/1
 ]).
 
 start(_Type, _Args) ->
-   clue_storage(),
+   clue_stats(),
    clue_sup:start_link().
 
 stop(_State) ->
    ok.
 
 %%
-%% clue storage
-clue_storage() ->
+%% statistic and counter table
+clue_stats() ->
    _  = ets:new(clue, [
-      public, 
-      named_table, 
-      ordered_set, 
-      {write_concurrency, true}, 
-      {read_concurrency,  true},
-      {keypos,       #clue.key}
+      public
+     ,named_table 
+     ,ordered_set 
+     ,{write_concurrency, true}
+     ,{read_concurrency,  true}
+     ,{keypos,       #clue.key}
    ]).
 
 

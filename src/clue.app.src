@@ -1,13 +1,8 @@
 {application, clue,
    [
       {description, "clue: system status repository"},
-      {vsn,         "2.1.0"},
-      {modules,     [
-         clue,
-         clue_sys,
-         clue_sup,
-         clue_app
-      ]},
+      {vsn,         "2.1.1"},
+      {modules,     []},
       {registered,  []},
       {applications,[
          kernel,

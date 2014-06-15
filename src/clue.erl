@@ -44,7 +44,7 @@
    lookup/1, 
    fold/2,
    %% utility
-   usec/2%, key/1, key/2, lit/1, lit/2
+   usec/2
 ]).
 
 %%
@@ -60,6 +60,7 @@ start() ->
 
 %%
 %% define new metric / reset existed
+%% time-to-live is defined in milliseconds
 -spec(define/2 :: (metric(), key()) -> ok).
 -spec(define/3 :: (metric(), key(), ttl()) -> ok).
 
