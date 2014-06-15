@@ -19,29 +19,12 @@
 %% clue metric
 %% change clue:lookup(...) if size of tuple is changed
 -record(clue, {
-   type,  %% metric type
-   key,   %% metric id
-   val,   %% metric raw value
-   time,  %% metric time stamp 
-   ttl,   %% time-to-live
-   state  %% metric state
+   type     = undefined :: atom() %% metric type
+  ,key      = undefined :: any()  %% metric id
+  ,val      = undefined :: any()  %% metric raw value
+  ,time     = undefined :: any()  %% metric time stamp 
+  ,ttl      = undefined :: any()  %% time-to-live
+  ,state    = undefined :: any()  %% metric state
 }).
-
-
-
-
-
-
-
-% -define(CLUE_FLUSH,  10000). 
-% -define(CLUE_SYNC,   10000). 
-
-% -define(CLUE_TCP, [
-%    binary,
-%    {packet,  line},
-%    {recbuf,  128 * 1024},
-%    {sndbuf,  128 * 1024}
-% ]).
-
 
 

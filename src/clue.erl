@@ -140,7 +140,6 @@ get(Key) ->
       [E] -> clue:get(E)
    end.
 
-
 get(Node, Key) ->
    rpc:call(Node, clue, get, [Key]).
 
@@ -288,12 +287,12 @@ usec(Key, T) ->
 %% create new metric
 metric(Type, Key, TTL) ->
    #clue{
-      type  = Type,
-      key   = Key,
-      val   = 0,
-      time  = usec(),
-      ttl   = tinc(usec(), TTL),
-      state = 0 
+      type      = Type
+     ,key       = Key
+     ,val       = 0
+     ,time      = usec()
+     ,ttl       = tinc(usec(), TTL)
+     ,state     = 0 
    }.
 
 usec() ->
@@ -313,5 +312,6 @@ tinc({Msec, Sec, Usec}, T)
       X ->
          {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
    end.
+
 
 
