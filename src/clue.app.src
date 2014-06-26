@@ -1,12 +1,13 @@
 {application, clue,
    [
       {description, "clue: system status repository"},
-      {vsn,         "2.1.1"},
+      {vsn,         "2.2.0"},
       {modules,     []},
       {registered,  []},
       {applications,[
          kernel
         ,stdlib
+        ,sasl
       ]},
       {mod, {clue_app, []}},
       {env, []}

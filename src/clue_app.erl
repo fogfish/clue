@@ -26,8 +26,10 @@
 ]).
 
 start(_Type, _Args) ->
+   {ok, Sup} = clue_sup:start_link(),
    clue_stats(),
-   clue_sup:start_link().
+   clue_health_handler:start(),
+   {ok, Sup}.
 
 stop(_State) ->
    ok.
