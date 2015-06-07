@@ -26,16 +26,16 @@
 ]).
 
 start(_Type, _Args) ->
-   {ok, Sup} = clue_sup:start_link(),
-   clue_stats(),
-   {ok, Sup}.
+   create_db(),
+   define_db(),
+   clue_sup:start_link().
 
 stop(_State) ->
    ok.
 
 %%
 %% statistic and counter table
-clue_stats() ->
+create_db() ->
    _  = ets:new(clue, [
       public
      ,named_table 
@@ -45,6 +45,13 @@ clue_stats() ->
      ,{keypos,       #clue.key}
    ]).
 
+%%
+%% define build-in counters
+define_db() ->
+   lists:foreach(
+      fun({Type, Key}) -> clue:define(Type, Key); ({Type, Key, TTL}) -> clue:define(Type, Key, TTL) end,
+      opts:val(sensors, [], clue)
+   ).   
 
 
 
