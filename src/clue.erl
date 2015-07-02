@@ -44,7 +44,8 @@
    lookup/1, 
    fold/2,
    %% utility
-   usec/2
+   usec/2,  % @deprecated
+   t/2
 ]).
 
 %%
@@ -272,10 +273,13 @@ fold(Fun, Acc0) ->
 %%
 %% helper function to increment duration in usec
 -spec(usec/2 :: (any(), any()) -> ok).
+-spec(t/2 :: (any(), any()) -> ok).
 
 usec(Key, T) ->
    clue:inc(Key, timer:now_diff(os:timestamp(), T)).
 
+t(Key, T) ->
+   clue:inc(Key, timer:now_diff(os:timestamp(), T)).
 
 %%%----------------------------------------------------------------------------   
 %%%
