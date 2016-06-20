@@ -66,10 +66,10 @@ start() ->
 -spec(define/3 :: (metric(), key(), ttl()) -> ok).
 
 define(Type, Key) ->
-   _ = ets:insert(clue, metric(Type, Key, infinity)),
+   _ = ets:insert_new(clue, metric(Type, Key, infinity)),
    ok.
 define(Type, Key, TTL) ->
-   _ = ets:insert(clue, metric(Type, Key, erlang:trunc(TTL * 1000))),
+   _ = ets:insert_new(clue, metric(Type, Key, erlang:trunc(TTL * 1000))),
    ok.
 
 %%%----------------------------------------------------------------------------   

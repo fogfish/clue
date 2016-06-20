@@ -5,9 +5,9 @@
 *.dump
 *.tag.gz
 *.tgz
-ebin/
 deps.config
-deps/
 .eunit/
-rebar
+_build/
+rebar3
+rebar.lock
 *.sublime-*
