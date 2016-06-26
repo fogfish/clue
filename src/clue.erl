@@ -26,9 +26,14 @@
 
 -export([start/0]).
 -export([
+   %% data structure
+   new/2,
+   new/3,
+   update/2,
+   value/1,
+   %% global stats table
    define/2, 
    define/3,
-   %% update counter
    put/2, 
    put/3, 
    get/1, 
@@ -59,6 +64,92 @@
 start() -> 
    applib:boot(?MODULE, []).
 
+%%%----------------------------------------------------------------------------   
+%%%
+%%% data type
+%%%
+%%%----------------------------------------------------------------------------   
+
+%%
+%% create new counter data structure
+-spec new(metric(), key()) -> #clue{}.
+-spec new(metric(), key(), ttl()) -> #clue{}.
+
+new(Type, Id) ->
+   new(Type, Id, infinity).
+
+new(Type, Key, TTL) ->
+   #clue{
+      type      = Type
+     ,key       = Key
+     ,val       = 0
+     ,time      = usec()
+     ,ttl       = tinc(usec(), TTL)
+     ,state     = 0 
+   }.
+
+%%
+%% update counter
+-spec update(number(), #clue{}) -> #clue{}.
+
+update(X, #clue{val = Val} = State) ->
+   State#clue{val = Val + X}.
+
+%%
+%% read counter value and apply aggregation 
+-spec value(#clue{}) -> {number(), #clue{}}.
+
+value(#clue{type=gauge, val=Val} = State) ->
+   {Val, State};
+
+value(#clue{type=counter, val=Val, ttl=infinity} = State) ->
+   {Val, State};
+
+value(#clue{type=counter, val=Val, time=T, ttl=TTL, state=Last} = State) ->
+   case os:timestamp() of
+      %% TTL is not expired, current value is not flushed
+      X when X < TTL ->
+         {Val - Last, State};
+      %% TTL is expired shift current value
+      X ->
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         {Val - Last, State#clue{time = X, ttl = NTTL, state = Val}}
+   end;
+
+value(#clue{type=meter, val=Val, time=T, ttl=infinity} = State) ->
+   {Val / diff(T), State};
+
+value(#clue{type=meter, val=Val, time=T, ttl=TTL} = State) ->
+   case os:timestamp() of
+      X when X < TTL ->
+         {Val / diff(X, T), State};
+      X ->
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         {Val / diff(X, T), State#clue{val = 0, time = X, ttl = NTTL}}
+   end;
+
+value(#clue{type=measure, val=Val,  time=T, ttl=infinity} = State) ->
+   {Val / diff(T), State};
+
+value(#clue{type=measure, val=Val, time=T, ttl=TTL, state=Last} = State) ->
+   case os:timestamp() of
+      %% TTL is not expired, current value is not flushed
+      X when X < TTL ->
+         {(Val - Last) / diff(T), State};
+      %% TTL is expired shift current value
+      X ->
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         {(Val - Last) / diff(T), State#clue{time = X}, ttl = NTTL, state = Val}
+   end.
+
+
+%%%----------------------------------------------------------------------------   
+%%%
+%%% global stats table
+%%%
+%%%----------------------------------------------------------------------------   
+
+
 %%
 %% define new metric / reset existed
 %% time-to-live is defined in milliseconds
@@ -66,69 +157,60 @@ start() ->
 -spec(define/3 :: (metric(), key(), ttl()) -> ok).
 
 define(Type, Key) ->
-   _ = ets:insert_new(clue, metric(Type, Key, infinity)),
+   _ = ets:insert_new(clue, new(Type, Key, infinity)),
    ok.
 define(Type, Key, TTL) ->
-   _ = ets:insert_new(clue, metric(Type, Key, erlang:trunc(TTL * 1000))),
+   _ = ets:insert_new(clue, new(Type, Key, erlang:trunc(TTL * 1000))),
    ok.
-
-%%%----------------------------------------------------------------------------   
-%%%
-%%% setters / getters
-%%%
-%%%----------------------------------------------------------------------------   
 
 %%
 %% get metric value
 -spec(get/1 :: (any()) -> any()).
 -spec(get/2 :: (node(), any()) -> any()).
 
-get(#clue{type=gauge, val=Val}) ->
-   Val;
+get(#clue{type=gauge} = State) ->
+   erlang:element(1, value(State));
 
-get(#clue{type=counter, val=Val, ttl=infinity}) ->
-   Val;
+get(#clue{type=counter, ttl=infinity} = State) ->
+   erlang:element(1, value(State));
 
-get(#clue{type=counter, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
-   case os:timestamp() of
-      %% TTL is not expired, current value is not flushed
-      X when X < TTL ->
-         Val - Last;
-      %% TTL is expired shift current value
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
-         Val - Last
+get(#clue{type=counter, key=Key} = State) ->
+   case value(State) of
+      {Val, State} -> 
+         Val;
+      {Val, #clue{time = T, ttl = NTTL, state = IState}} ->
+         ets:update_element(clue, Key, 
+            [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}]
+         ),
+         Val
    end;
 
+get(#clue{type=meter, ttl=infinity} = State) ->
+   erlang:element(1, value(State));
 
-get(#clue{type=meter, val=Val, time=T, ttl=infinity}) ->
-   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
-
-get(#clue{type=meter, key=Key, val=Val, time=T, ttl=TTL}) ->
-   case os:timestamp() of
-      X when X < TTL ->
-         Val / (timer:now_diff(X, T) / 1000000);
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         ets:update_element(clue, Key, [{#clue.val, 0}, {#clue.time, X}, {#clue.ttl, NTTL}]),
-         Val / (timer:now_diff(X, T) / 1000000)
+get(#clue{type=meter, key=Key} = State) ->
+   case value(State) of
+      {Val, State} -> 
+         Val;
+      {Val, #clue{time = T, ttl = NTTL, val = IVal}} ->
+         ets:update_element(clue, Key, 
+            [{#clue.val, IVal}, {#clue.time, T}, {#clue.ttl, NTTL}]
+         ),
+         Val
    end;
 
+get(#clue{type=measure, ttl=infinity} = State) ->
+   erlang:element(1, value(State));
 
-get(#clue{type=measure, val=Val,  time=T, ttl=infinity}) ->
-   Val / (timer:now_diff(os:timestamp(), T) / 1000000);
-
-get(#clue{type=measure, key=Key, val=Val, time=T, ttl=TTL, state=Last}) ->
-   case os:timestamp() of
-      %% TTL is not expired, current value is not flushed
-      X when X < TTL ->
-         (Val - Last) / (timer:now_diff(X, T) / 1000000);
-      %% TTL is expired shift current value
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         ets:update_element(clue, Key, [{#clue.time, X}, {#clue.ttl, NTTL}, {#clue.state, Val}]),
-         (Val - Last) / (timer:now_diff(X, T) / 1000000)
+get(#clue{type=measure, key=Key} = State) ->
+   case value(State) of
+      {Val, State} -> 
+         Val;
+      {Val, #clue{time = T, ttl = NTTL, state = IState}} ->
+         ets:update_element(clue, Key, 
+            [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}]
+         ),
+         Val
    end;
 
 get(Key)
@@ -288,22 +370,12 @@ t(Key, T) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% create new metric
-metric(Type, Key, TTL) ->
-   #clue{
-      type      = Type
-     ,key       = Key
-     ,val       = 0
-     ,time      = usec()
-     ,ttl       = tinc(usec(), TTL)
-     ,state     = 0 
-   }.
-
+%%
 usec() ->
    os:timestamp().
 
 %%
-%% sum time stamps
+%% add time
 tinc(_, infinity) ->
    infinity;
 tinc({Msec, Sec, Usec}, T)
@@ -317,5 +389,10 @@ tinc({Msec, Sec, Usec}, T)
          {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
    end.
 
+%%
+%%
+diff(T) ->
+   diff(os:timestamp(), T).
 
-
+diff(A, B) ->
+   (timer:now_diff(A, B) / 1000000).

@@ -1,7 +1,7 @@
 {application, clue,
    [
       {description, "clue: system status repository"},
-      {vsn,         "2.3.3"},
+      {vsn,         "2.4.0"},
       {modules,     []},
       {registered,  []},
       {applications,[
