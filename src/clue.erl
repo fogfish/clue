@@ -156,7 +156,7 @@ value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
       X ->
          DVal = A * Val + (1 - A) * Last,
          NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {(Val - Last) / diff(T), State#clue{val=0.0, time = X, ttl = NTTL, state = DVal}}
+         {DVal, State#clue{val=0.0, time = X, ttl = NTTL, state = 0.0}}
    end.
 
 %%%----------------------------------------------------------------------------   
