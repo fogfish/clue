@@ -55,7 +55,7 @@
 
 %%
 %%
--type(metric() :: gauge | counter | meter | measure).
+-type(metric() :: gauge | counter | meter | measure | {decay, number()}).
 -type(key()    :: tuple()).
 -type(ttl()    :: timeout()).
 
@@ -139,9 +139,25 @@ value(#clue{type=measure, val=Val, time=T, ttl=TTL, state=Last} = State) ->
       %% TTL is expired shift current value
       X ->
          NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {(Val - Last) / diff(T), State#clue{time = X}, ttl = NTTL, state = Val}
-   end.
+         {(Val - Last) / diff(T), State#clue{time = X, ttl = NTTL, state = Val}}
+   end;
 
+value(#clue{type={decay, A}, val=Val, ttl=infinity, state=Last} = State) ->
+   DVal = A * Val + (1 - A) * Last,
+   {DVal, State#clue{val=0.0, state=DVal}};
+
+value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
+   case os:timestamp() of
+      %% TTL is not expired, current value is not flushed
+      X when X < TTL ->
+         DVal = A * Val + (1 - A) * Last,
+         {DVal, State#clue{val=0.0, state=DVal}};
+      %% TTL is expired shift current value
+      X ->
+         DVal = A * Val + (1 - A) * Last,
+         NTTL = tinc(X, timer:now_diff(TTL, T)),
+         {(Val - Last) / diff(T), State#clue{val=0.0, time = X, ttl = NTTL, state = DVal}}
+   end.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -212,6 +228,13 @@ get(#clue{type=measure, key=Key} = State) ->
          ),
          Val
    end;
+
+get(#clue{type={decay, _}, key=Key} = State) ->
+   {Val, #clue{time = T, ttl = NTTL, state = IState, val = IVal}} = value(State),
+   ets:update_element(clue, Key, 
+      [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}, {#clue.val, IVal}]
+   ),
+   Val;
 
 get(Key)
  when is_list(Key) ->
