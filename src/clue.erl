@@ -50,7 +50,8 @@
    fold/2,
    %% utility
    usec/2,  % @deprecated
-   t/2
+   t/2,
+   tinc/2
 ]).
 
 %%
@@ -169,8 +170,8 @@ value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
 %%
 %% define new metric / reset existed
 %% time-to-live is defined in milliseconds
--spec(define/2 :: (metric(), key()) -> ok).
--spec(define/3 :: (metric(), key(), ttl()) -> ok).
+-spec define(metric(), key()) -> ok.
+-spec define(metric(), key(), ttl()) -> ok.
 
 define(Type, Key) ->
    _ = ets:insert_new(clue, new(Type, Key, infinity)),
@@ -181,8 +182,8 @@ define(Type, Key, TTL) ->
 
 %%
 %% get metric value
--spec(get/1 :: (any()) -> any()).
--spec(get/2 :: (node(), any()) -> any()).
+-spec get(any()) -> any().
+-spec get(node(), any()) -> any().
 
 get(#clue{type=gauge} = State) ->
    erlang:element(1, value(State));
@@ -253,8 +254,8 @@ get(Node, Key) ->
 %%
 %% put value / reset counter to initial state 
 %% return counter value 
--spec(put/2  :: (any(), any()) -> any()).
--spec(put/3  :: (node(), any(), any()) -> any()).
+-spec put(any(), any()) -> any().
+-spec put(node(), any(), any()) -> any().
 
 put(Key, Val)
  when is_list(Key) ->
@@ -276,9 +277,9 @@ put(Node, Key, Val) ->
 
 %%
 %% increment counter
--spec(inc/1 :: (any()) -> integer()).
--spec(inc/2 :: (any(), integer()) -> integer()).
--spec(inc/3 :: (node(), any(), integer()) -> integer()).
+-spec inc(any()) -> integer().
+-spec inc(any(), integer()) -> integer().
+-spec inc(node(), any(), integer()) -> integer().
 
 inc(Key) ->
    inc(Key, 1).
@@ -299,8 +300,8 @@ inc(Node, Key, Val) ->
 
 %%
 %% decrement counter
--spec(dec/1 :: (any()) -> integer()).
--spec(dec/2 :: (any(), integer()) -> integer()).
+-spec dec(any()) -> integer().
+-spec dec(any(), integer()) -> integer().
 
 dec(Key) ->
    dec(Key, 1).
@@ -321,7 +322,7 @@ dec(Node, Key, Val) ->
 
 %%
 %% lookup key(s) based on prefix
--spec(prefix/1 :: (any()) -> list()).
+-spec prefix(any()) -> list().
 
 prefix(Key)
  when is_tuple(Key) ->
@@ -349,7 +350,7 @@ prefix(Key) ->
 
 %%
 %% lookup key(s) based on pattern
--spec(lookup/1 :: (any()) -> list()).
+-spec lookup(any()) -> list().
 
 lookup(Key) ->
    Query  = [{
@@ -366,7 +367,7 @@ lookup(Key) ->
 
 %%
 %% fold function over dataset
--spec(fold/2 :: (function(), any()) -> any()).
+-spec fold(function(), any()) -> any().
 
 fold(Fun, Acc0) ->
    ets:foldl(
@@ -377,8 +378,8 @@ fold(Fun, Acc0) ->
 
 %%
 %% helper function to increment duration in usec
--spec(usec/2 :: (any(), any()) -> ok).
--spec(t/2 :: (any(), any()) -> ok).
+-spec usec(any(), any()) -> ok.
+-spec t(any(), any()) -> ok.
 
 usec(Key, T) ->
    clue:inc(Key, timer:now_diff(os:timestamp(), T)).
