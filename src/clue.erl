@@ -145,20 +145,29 @@ value(#clue{type=measure, val=Val, time=T, ttl=TTL, state=Last} = State) ->
 
 value(#clue{type={decay, A}, val=Val, ttl=infinity, state=Last} = State) ->
    DVal = A * Val + (1 - A) * Last,
-   {DVal, State#clue{val=0.0, state=DVal}};
+   {DVal, State#clue{val = 0, state=DVal}};
 
 value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
    case os:timestamp() of
       %% TTL is not expired, current value is not flushed
       X when X < TTL ->
          DVal = A * Val + (1 - A) * Last,
-         {DVal, State#clue{val=0.0, state=DVal}};
+         {DVal, State#clue{val = 0, state=DVal}};
       %% TTL is expired shift current value
       X ->
          DVal = A * Val + (1 - A) * Last,
          NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {DVal, State#clue{val=0.0, time = X, ttl = NTTL, state = 0.0}}
-   end.
+         {DVal, State#clue{val = 0, time = X, ttl = NTTL, state = 0.0}}
+   end;
+
+value(#clue{type={wma, W}, val=Val, time=T, ttl=infinity, state = Last} = State) ->
+   N = os:timestamp(),
+   I = timer:now_diff(N, T) div 1000000,
+   A = math:exp(-I / W),
+   DVal = (1 - A) * Val + A * Last,
+   {DVal, State#clue{val = 0, time=N, state=DVal}}.
+   
+   
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -234,6 +243,13 @@ get(#clue{type={decay, _}, key=Key} = State) ->
    {Val, #clue{time = T, ttl = NTTL, state = IState, val = IVal}} = value(State),
    ets:update_element(clue, Key, 
       [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}, {#clue.val, IVal}]
+   ),
+   Val;
+
+get(#clue{type={wma, _}, key=Key} = State) ->
+   {Val, #clue{time = T, state = IState, val = IVal}} = value(State),
+   ets:update_element(clue, Key, 
+      [{#clue.time, T}, {#clue.state, IState}, {#clue.val, IVal}]
    ),
    Val;
 
