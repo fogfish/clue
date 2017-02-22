@@ -56,7 +56,7 @@
 
 %%
 %%
--type(metric() :: gauge | counter | meter | measure | {decay, number()}).
+-type(metric() :: gauge | counter | meter | measure | {decay, number()} | {ewma, number()}).
 -type(key()    :: tuple()).
 -type(ttl()    :: timeout()).
 
@@ -160,7 +160,7 @@ value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
          {DVal, State#clue{val = 0, time = X, ttl = NTTL, state = 0.0}}
    end;
 
-value(#clue{type={wma, W}, val=Val, time=T, ttl=infinity, state = Last} = State) ->
+value(#clue{type={ewma, W}, val=Val, time=T, ttl=infinity, state = Last} = State) ->
    N = os:timestamp(),
    I = timer:now_diff(N, T) div 1000000,
    A = math:exp(-I / W),
@@ -246,7 +246,7 @@ get(#clue{type={decay, _}, key=Key} = State) ->
    ),
    Val;
 
-get(#clue{type={wma, _}, key=Key} = State) ->
+get(#clue{type={ewma, _}, key=Key} = State) ->
    {Val, #clue{time = T, state = IState, val = IVal}} = value(State),
    ets:update_element(clue, Key, 
       [{#clue.time, T}, {#clue.state, IState}, {#clue.val, IVal}]
