@@ -33,7 +33,12 @@ handle_cast(_, State) ->
    {noreply, State}.
 
 handle_info({logger, TTL}, State) ->
-   error_logger:info_report(clue:get(State)),
+   lists:foreach(
+      fun(X) -> 
+         error_logger:info_report([X])
+      end,
+      clue:get(State)
+   ),
    erlang:send_after(TTL, self(), {logger, TTL}),
    {noreply, State}.
 
