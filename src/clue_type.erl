@@ -14,31 +14,42 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_sup).
--behaviour(supervisor).
--author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
+%% @doc
+%%
+-module(clue_type).
 
--include("clue.hrl").
 -export([
-   start_link/0, 
-   init/1
+   usec/0,
+   tinc/2,
+   diff/1,
+   diff/2
 ]).
 
-%%
--define(CHILD(Type, I),            {I,  {I, start_link,   []}, permanent, 5000, Type, dynamic}).
--define(CHILD(Type, I, Args),      {I,  {I, start_link, Args}, permanent, 5000, Type, dynamic}).
--define(CHILD(Type, ID, I, Args),  {ID, {I, start_link, Args}, permanent, 5000, Type, dynamic}).
 
 %%
 %%
-start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+usec() ->
+   os:timestamp().
 
-   
-init([]) ->
-   {ok,
-      {
-         {one_for_one, 4, 1800},
-         [?CHILD(worker, clue_logger, [application:get_env(clue, logger, 0)])]
-      }
-   }.
+%%
+%% add time
+tinc(_, infinity) ->
+   infinity;
+tinc({Msec, Sec, Usec}, T)
+ when is_integer(T) ->
+   case Usec + T of
+      X when X =< 1000000 ->
+         {Msec, Sec, X};
+      X when X =< 1000000 * 1000000 ->
+         {Msec, Sec + (X div 1000000), X rem 1000000};
+      X ->
+         {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
+   end.
+
+%%
+%%
+diff(T) ->
+   diff(os:timestamp(), T).
+
+diff(A, B) ->
+   (timer:now_diff(A, B) / 1000000).

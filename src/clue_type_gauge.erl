@@ -14,31 +14,44 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
--module(clue_sup).
--behaviour(supervisor).
--author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
-
+%% @doc
+%%
+-module(clue_type_gauge).
 -include("clue.hrl").
+
 -export([
-   start_link/0, 
-   init/1
+   new/2,
+   value/1,
+   update/1
 ]).
 
-%%
--define(CHILD(Type, I),            {I,  {I, start_link,   []}, permanent, 5000, Type, dynamic}).
--define(CHILD(Type, I, Args),      {I,  {I, start_link, Args}, permanent, 5000, Type, dynamic}).
--define(CHILD(Type, ID, I, Args),  {ID, {I, start_link, Args}, permanent, 5000, Type, dynamic}).
 
 %%
 %%
-start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+-spec new(_, _) -> #clue{}.
 
-   
-init([]) ->
-   {ok,
-      {
-         {one_for_one, 4, 1800},
-         [?CHILD(worker, clue_logger, [application:get_env(clue, logger, 0)])]
-      }
+new(Key, TTL) ->
+   #clue{
+      type      = ?MODULE
+     ,key       = Key
+     ,val       = 0
+     ,time      = clue_type:usec()
+     ,ttl       = clue_type:tinc(clue_type:usec(), TTL)
+     ,state     = 0 
    }.
+
+%%
+%%
+-spec value(#clue{}) -> {_, #clue{}}.
+
+value(#clue{val = Val} = State) ->
+   {false, Val, State}.
+
+%%
+%%
+-spec update(#clue{}) -> [_].
+
+update(_) ->
+   [].
+
+

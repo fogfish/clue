@@ -35,20 +35,17 @@
    define/2, 
    define/3,
    put/2, 
-   put/3, 
    get/1, 
-   get/2, 
    inc/1, 
    inc/2, 
-   inc/3,
    dec/1, 
    dec/2, 
-   dec/3,
    %% query counters
    prefix/1, 
    lookup/1, 
    fold/2,
    %% utility
+   log/1,
    usec/2,  % @deprecated
    t/2,
    tinc/2
@@ -56,9 +53,9 @@
 
 %%
 %%
--type(metric() :: gauge | counter | meter | measure | {decay, number()} | {ewma, number()}).
--type(key()    :: tuple()).
--type(ttl()    :: timeout()).
+-type metric() :: gauge | counter | meter | measure | {decay, number()} | {ewma, number()}.
+-type key()    :: tuple().
+-type ttl()    :: timeout().
 
 %%
 %% start application
@@ -79,15 +76,24 @@ start() ->
 new(Type, Id) ->
    new(Type, Id, infinity).
 
-new(Type, Key, TTL) ->
-   #clue{
-      type      = Type
-     ,key       = Key
-     ,val       = 0
-     ,time      = usec()
-     ,ttl       = tinc(usec(), TTL)
-     ,state     = 0 
-   }.
+new(gauge, Key, TTL) ->
+   clue_type_gauge:new(Key, TTL);
+
+new(counter, Key, TTL) ->
+   clue_type_counter:new(Key, TTL);
+
+new(meter, Key, TTL) ->
+   clue_type_meter:new(Key, TTL);
+
+new(measure, Key, TTL) ->
+   clue_type_measure:new(Key, TTL);
+
+new({decay, A}, Key, TTL) ->
+   clue_type_decay:new(A, Key, TTL);
+
+new({emwa, A}, Key, TTL) ->
+   clue_type_emwa:new(A, Key, TTL).
+
 
 %%
 %% update counter
@@ -100,74 +106,9 @@ update(X, #clue{val = Val} = State) ->
 %% read counter value and apply aggregation 
 -spec value(#clue{}) -> {number(), #clue{}}.
 
-value(#clue{type=gauge, val=Val} = State) ->
-   {Val, State};
+value(#clue{type = Type} = State) ->
+   Type:value(State).
 
-value(#clue{type=counter, val=Val, ttl=infinity} = State) ->
-   {Val, State};
-
-value(#clue{type=counter, val=Val, time=T, ttl=TTL, state=Last} = State) ->
-   case os:timestamp() of
-      %% TTL is not expired, current value is not flushed
-      X when X < TTL ->
-         {Val - Last, State};
-      %% TTL is expired shift current value
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {Val - Last, State#clue{time = X, ttl = NTTL, state = Val}}
-   end;
-
-value(#clue{type=meter, val=Val, time=T, ttl=infinity} = State) ->
-   {Val / diff(T), State};
-
-value(#clue{type=meter, val=Val, time=T, ttl=TTL} = State) ->
-   case os:timestamp() of
-      X when X < TTL ->
-         {Val / diff(X, T), State};
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {Val / diff(X, T), State#clue{val = 0, time = X, ttl = NTTL}}
-   end;
-
-value(#clue{type=measure, val=Val,  time=T, ttl=infinity} = State) ->
-   {Val / diff(T), State};
-
-value(#clue{type=measure, val=Val, time=T, ttl=TTL, state=Last} = State) ->
-   case os:timestamp() of
-      %% TTL is not expired, current value is not flushed
-      X when X < TTL ->
-         {(Val - Last) / diff(T), State};
-      %% TTL is expired shift current value
-      X ->
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {(Val - Last) / diff(T), State#clue{time = X, ttl = NTTL, state = Val}}
-   end;
-
-value(#clue{type={decay, A}, val=Val, ttl=infinity, state=Last} = State) ->
-   DVal = A * Val + (1 - A) * Last,
-   {DVal, State#clue{val = 0, state=DVal}};
-
-value(#clue{type={decay, A}, val=Val, time=T, ttl=TTL, state=Last} = State) ->
-   case os:timestamp() of
-      %% TTL is not expired, current value is not flushed
-      X when X < TTL ->
-         DVal = A * Val + (1 - A) * Last,
-         {DVal, State#clue{val = 0, state=DVal}};
-      %% TTL is expired shift current value
-      X ->
-         DVal = A * Val + (1 - A) * Last,
-         NTTL = tinc(X, timer:now_diff(TTL, T)),
-         {DVal, State#clue{val = 0, time = X, ttl = NTTL, state = 0.0}}
-   end;
-
-value(#clue{type={ewma, W}, val=Val, time=T, ttl=infinity, state = Last} = State) ->
-   N = os:timestamp(),
-   I = timer:now_diff(N, T) div 1000000,
-   A = math:exp(-I / W),
-   DVal = (1 - A) * Val + A * Last,
-   {DVal, State#clue{val = 0, time=N, state=DVal}}.
-   
-   
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -192,70 +133,19 @@ define(Type, Key, TTL) ->
 %%
 %% get metric value
 -spec get(any()) -> any().
--spec get(node(), any()) -> any().
 
-get(#clue{type=gauge} = State) ->
-   erlang:element(1, value(State));
-
-get(#clue{type=counter, ttl=infinity} = State) ->
-   erlang:element(1, value(State));
-
-get(#clue{type=counter, key=Key} = State) ->
-   case value(State) of
-      {Val, State} -> 
-         Val;
-      {Val, #clue{time = T, ttl = NTTL, state = IState}} ->
-         ets:update_element(clue, Key, 
-            [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}]
-         ),
-         Val
+get(#clue{type = Type, key = Key} = State0) ->
+   case value(State0) of
+      {false, Value, _} ->
+         Value;
+      {true, Value, State1} ->
+         ets:update_element(clue, Key, Type:update(State1)),
+         Value
    end;
-
-get(#clue{type=meter, ttl=infinity} = State) ->
-   erlang:element(1, value(State));
-
-get(#clue{type=meter, key=Key} = State) ->
-   case value(State) of
-      {Val, State} -> 
-         Val;
-      {Val, #clue{time = T, ttl = NTTL, val = IVal}} ->
-         ets:update_element(clue, Key, 
-            [{#clue.val, IVal}, {#clue.time, T}, {#clue.ttl, NTTL}]
-         ),
-         Val
-   end;
-
-get(#clue{type=measure, ttl=infinity} = State) ->
-   erlang:element(1, value(State));
-
-get(#clue{type=measure, key=Key} = State) ->
-   case value(State) of
-      {Val, State} -> 
-         Val;
-      {Val, #clue{time = T, ttl = NTTL, state = IState}} ->
-         ets:update_element(clue, Key, 
-            [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}]
-         ),
-         Val
-   end;
-
-get(#clue{type={decay, _}, key=Key} = State) ->
-   {Val, #clue{time = T, ttl = NTTL, state = IState, val = IVal}} = value(State),
-   ets:update_element(clue, Key, 
-      [{#clue.time, T}, {#clue.ttl, NTTL}, {#clue.state, IState}, {#clue.val, IVal}]
-   ),
-   Val;
-
-get(#clue{type={ewma, _}, key=Key} = State) ->
-   {Val, #clue{time = T, state = IState, val = IVal}} = value(State),
-   ets:update_element(clue, Key, 
-      [{#clue.time, T}, {#clue.state, IState}, {#clue.val, IVal}]
-   ),
-   Val;
 
 get(Key)
  when is_list(Key) ->
-   [clue:get(X) || X <- Key];
+   [{X, clue:get(X)} || X <- Key];
 
 get(Key) ->
    case ets:lookup(clue, Key) of
@@ -263,15 +153,10 @@ get(Key) ->
       [E] -> clue:get(E)
    end.
 
-get(Node, Key) ->
-   rpc:call(Node, clue, get, [Key]).
-
-
 %%
 %% put value / reset counter to initial state 
 %% return counter value 
 -spec put(any(), any()) -> any().
--spec put(node(), any(), any()) -> any().
 
 put(Key, Val)
  when is_list(Key) ->
@@ -287,15 +172,11 @@ put(Key, Val) ->
          clue:put(Key, Val)
    end.
 
-put(Node, Key, Val) ->
-   rpc:cast(Node, clue, put, [Key, Val]).
-
 
 %%
 %% increment counter
 -spec inc(any()) -> integer().
 -spec inc(any(), integer()) -> integer().
--spec inc(node(), any(), integer()) -> integer().
 
 inc(Key) ->
    inc(Key, 1).
@@ -310,9 +191,6 @@ inc(Key, Val) ->
    catch _:badarg ->
       undefined
    end.
-
-inc(Node, Key, Val) ->
-   rpc:cast(Node, clue, inc, [Key, Val]).
 
 %%
 %% decrement counter
@@ -332,9 +210,6 @@ dec(Key, Val) ->
    catch _:badarg ->
       undefined
    end.
-
-dec(Node, Key, Val) ->
-   rpc:cast(Node, clue, dec, [Key, Val]).
 
 %%
 %% lookup key(s) based on prefix
@@ -391,6 +266,12 @@ fold(Fun, Acc0) ->
       Acc0,
       clue
    ).
+
+%%
+%%
+log(Key) ->
+   gen_server:call(clue_logger, {log, Key}).
+
 
 %%
 %% helper function to increment duration in usec

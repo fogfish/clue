@@ -39,7 +39,7 @@ create_db() ->
    _  = ets:new(clue, [
       public
      ,named_table 
-     ,ordered_set 
+     ,set                       %% Note: this is a set type due to performance 
      ,{write_concurrency, true}
      ,{read_concurrency,  true}
      ,{keypos,       #clue.key}
