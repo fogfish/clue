@@ -91,8 +91,8 @@ new(measure, Key, TTL) ->
 new({decay, A}, Key, TTL) ->
    clue_type_decay:new(A, Key, TTL);
 
-new({emwa, A}, Key, TTL) ->
-   clue_type_emwa:new(A, Key, TTL).
+new({ewma, A}, Key, TTL) ->
+   clue_type_ewma:new(A, Key, TTL).
 
 
 %%
