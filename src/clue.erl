@@ -125,10 +125,10 @@ value(#clue{type = Type} = State) ->
 
 define(Type, Key) ->
    _ = ets:insert_new(clue, new(Type, Key, infinity)),
-   ok.
+   Key.
 define(Type, Key, TTL) ->
    _ = ets:insert_new(clue, new(Type, Key, erlang:trunc(TTL * 1000))),
-   ok.
+   Key.
 
 %%
 %% get metric value
