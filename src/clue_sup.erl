@@ -32,13 +32,30 @@
 %%
 %%
 start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+   {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+   {ok,   _} = logger(),
+   {ok, Sup}.
 
    
 init([]) ->
    {ok,
       {
          {one_for_one, 4, 1800},
-         [?CHILD(worker, clue_logger, [application:get_env(clue, logger, 0)])]
+         [
+            ?CHILD(supervisor, clue_sensor_sup)
+         ]
       }
    }.
+
+%%
+%%
+logger() ->
+   T = application:get_env(clue, logger, 0),
+   supervisor:start_child(clue_sensor_sup, [clue_logger, T, fun logger/1, []]).
+
+logger(Report) ->
+   error_logger:info_msg("~n~n================================================"),
+   lists:foreach(
+      fun(X) -> error_logger:info_report([X]) end,
+      Report
+   ).

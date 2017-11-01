@@ -46,6 +46,7 @@
    fold/2,
    %% utility
    log/1,
+   spawn/3,
    usec/2,  % @deprecated
    t/2,
    tinc/2
@@ -268,9 +269,16 @@ fold(Fun, Acc0) ->
    ).
 
 %%
-%%
+%% enable periodic logging of the key
+-spec log(_) -> ok.
+
 log(Key) ->
-   gen_server:call(clue_logger, {log, Key}).
+   gen_server:call(clue_logger, {add, Key}).
+
+%%
+%% spawn a periodic key process
+spawn(T, Fun, Keys) ->
+   supervisor:start_child(clue_sensor_sup, [T, Fun, Keys]).
 
 
 %%
