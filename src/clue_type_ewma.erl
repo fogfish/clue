@@ -46,10 +46,16 @@ new(A, Key, TTL) ->
 
 value(#clue{val=Val, time=T, state = {W, Last}, ttl = infinity} = State) ->
    N = os:timestamp(),
-   I = timer:now_diff(N, T) div 1000000,
-   A = math:exp(-I / W),
-   DVal = (1 - A) * Val + A * Last,
-   {true, DVal, State#clue{val = 0, time = N, state = {W, DVal}}}.
+   case timer:now_diff(N, T) div 1000000 of
+      0 ->
+         {false, Last, State};
+
+      I ->
+         A = math:exp(-I / W),
+         Q = Val / I,
+         DVal = Q + A * (Last - Q),
+         {true, DVal, State#clue{val = 0, time = N, state = {W, DVal}}}
+   end.
 
 %%
 %%
