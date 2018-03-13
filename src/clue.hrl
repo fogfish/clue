@@ -26,5 +26,3 @@
   ,ttl      = undefined :: any()  %% time-to-live
   ,state    = undefined :: any()  %% metric state
 }).
-
-

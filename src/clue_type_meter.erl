@@ -51,12 +51,14 @@ value(#clue{val=Val, time=T, ttl=TTL} = State) ->
    case os:timestamp() of
       %% TTL is not expired, current value is not flushed
       X when X < TTL ->
-         {false, Val / clue_type:diff(X, T), State};
+         DVal = clue_type:round(Val / clue_type:diff(X, T)), 
+         {false, DVal, State};
 
       %% TTL is expired shift current value
       X ->
          NTTL = clue_type:tinc(X, timer:now_diff(TTL, T)),
-         {true, Val / clue_type:diff(X, T), State#clue{val = 0, time = X, ttl = NTTL}}
+         DVal = clue_type:round(Val / clue_type:diff(X, T)),
+         {true, DVal, State#clue{val = 0, time = X, ttl = NTTL}}
    end.
 
 %%

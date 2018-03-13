@@ -45,19 +45,19 @@ new(A, Key, TTL) ->
 -spec value(#clue{}) -> {_, #clue{}}.
 
 value(#clue{val = Val, state = {A, Last}, ttl = infinity} = State) ->
-   DVal = A * Val + (1 - A) * Last,
+   DVal = clue_type:round(A * Val + (1 - A) * Last),
    {true, DVal, State#clue{val = 0, state = {A, DVal}}};
 
 value(#clue{val = Val, time = T, ttl = TTL, state = {A, Last}} = State) ->
    case os:timestamp() of
       %% TTL is not expired, current value is not flushed
       X when X < TTL ->
-         DVal = A * Val + (1 - A) * Last,
+         DVal = clue_type:round(A * Val + (1 - A) * Last),
          {true, DVal, State#clue{val = 0, state = {A, DVal}}};
 
       %% TTL is expired shift current value
       X ->
-         DVal = A * Val + (1 - A) * Last,
+         DVal = clue_type:round(A * Val + (1 - A) * Last),
          NTTL = clue_type:tinc(X, timer:now_diff(TTL, T)),
          {true, DVal, State#clue{val = 0, time = X, ttl = NTTL, state = {A, 0.0}}}
    end.

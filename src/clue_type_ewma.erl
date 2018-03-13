@@ -53,7 +53,7 @@ value(#clue{val=Val, time=T, state = {W, Last}, ttl = infinity} = State) ->
       I ->
          A = math:exp(-I / W),
          Q = Val / I,
-         DVal = Q + A * (Last - Q),
+         DVal = clue_type:round(Q + A * (Last - Q)),
          {true, DVal, State#clue{val = 0, time = N, state = {W, DVal}}}
    end.
 

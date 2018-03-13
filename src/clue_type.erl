@@ -22,7 +22,8 @@
    usec/0,
    tinc/2,
    diff/1,
-   diff/2
+   diff/2,
+   round/1
 ]).
 
 
@@ -53,3 +54,11 @@ diff(T) ->
 
 diff(A, B) ->
    (timer:now_diff(A, B) / 1000000).
+
+%%
+%%
+round(X)
+ when X < 1.0e-3 ->
+   0.0;
+round(X) ->
+   X.
