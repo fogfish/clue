@@ -54,7 +54,13 @@ logger() ->
    supervisor:start_child(clue_sensor_sup, [clue_logger, T, fun logger/1, []]).
 
 logger(Report) ->
-   error_logger:info_msg("~n~n================================================"),
+   log([X || {_, Value} = X <- Report, Value > 0]).
+
+log([]) ->
+   ok;
+log(Report) ->
+   Now = tempus:encode(os:timestamp()),
+   error_logger:info_msg("~n~n====[ ~s ]====", [Now]),
    lists:foreach(
       fun(X) -> error_logger:info_report([X]) end,
       Report
