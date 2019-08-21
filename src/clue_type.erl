@@ -26,6 +26,7 @@
    round/1
 ]).
 
+-define(BASE, 1000000).
 
 %%
 %%
@@ -36,16 +37,20 @@ usec() ->
 %% add time
 tinc(_, infinity) ->
    infinity;
-tinc({Msec, Sec, Usec}, T)
+tinc({Msec, Sec, Usec} = Z, T)
  when is_integer(T) ->
-   case Usec + T of
-      X when X =< 1000000 ->
-         {Msec, Sec, X};
-      X when X =< 1000000 * 1000000 ->
-         {Msec, Sec + (X div 1000000), X rem 1000000};
-      X ->
-         {Msec + (X div (1000000 * 1000000)), Sec + (X div 1000000), X rem 1000000}
-   end.
+   A0  = T rem ?BASE,
+   Y   = T div ?BASE,
+   A1  = Y rem ?BASE,
+   A2  = Y div ?BASE,
+   {C0, Q0} = add_time(A0, Usec,  0),
+   {C1, Q1} = add_time(A1, Sec,  Q0),
+   {C2,  _} = add_time(A2, Msec, Q1),
+   {C2, C1, C0}.
+  
+add_time(X, Y, Q) ->
+   T = X + Y + Q,
+   {T rem ?BASE, T div ?BASE}.
 
 %%
 %%

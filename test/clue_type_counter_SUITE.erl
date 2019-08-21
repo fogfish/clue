@@ -30,4 +30,4 @@ value_ttl(_) ->
 
    3 = clue:inc({t,e,s,t,1}),
    4 = clue:inc({t,e,s,t,1}),
-   2 = clue:get({t,e,s,t,1}).
+   4 = clue:get({t,e,s,t,1}).
